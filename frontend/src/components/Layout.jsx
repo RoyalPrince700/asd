@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
   BarChart3,
+  ClipboardCheck,
   ClipboardList,
   Clock,
   LayoutDashboard,
@@ -22,8 +23,13 @@ const NAV_BY_ROLE = {
     { to: "/overview", label: "Overview", icon: LayoutDashboard },
     { to: "/analysis", label: "Analysis", icon: BarChart3 },
     { to: "/ledger", label: "Ledger lines", icon: ScrollText },
+    { to: "/edited-ledger", label: "Edited ledger", icon: ClipboardCheck },
     { to: "/products", label: "Product catalog", icon: Package },
     { to: "/staff", label: "Staff", icon: Users },
+  ],
+  accountant: [
+    { to: "/accountant/movement", label: "Stock movement", icon: ClipboardList },
+    { to: "/accountant/inventory", label: "Inventory", icon: Package },
   ],
   clerk: [{ to: "/entry", label: "Pending assignment", icon: Clock }],
 };

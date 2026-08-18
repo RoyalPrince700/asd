@@ -65,6 +65,7 @@ export function CfoProducts() {
   const [downloading, setDownloading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [deletingColumn, setDeletingColumn] = useState(null);
+  const [uploadMode, setUploadMode] = useState("update");
   const fileRef = useRef(null);
 
   const activeCompany = COMPANIES.find((item) => item.id === company) || COMPANIES[0];
@@ -139,12 +140,15 @@ export function CfoProducts() {
       return;
     }
 
+    const isReplace = uploadMode === "replace";
     if (
       !(await confirm({
-        title: "Replace catalog",
-        message: `This will replace all products for ${activeCompany.label} with the uploaded file. Continue?`,
-        confirmLabel: "Replace catalog",
-        variant: "danger",
+        title: isReplace ? "Replace catalog" : "Update catalog",
+        message: isReplace
+          ? `This will delete all ${total.toLocaleString()} existing products for ${activeCompany.label} and replace them with the uploaded file only. Continue?`
+          : `This will update location figures for matching products and add any new ones from the file. Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`,
+        confirmLabel: isReplace ? "Replace catalog" : "Update catalog",
+        variant: isReplace ? "danger" : "default",
       }))
     ) {
       return;
@@ -153,7 +157,7 @@ export function CfoProducts() {
     setBusy(true);
     setError("");
     try {
-      const result = await api.uploadProducts(file, company);
+      const result = await api.uploadProducts(file, company, uploadMode);
       toast({ message: result.message, type: "success" });
       if (fileRef.current) fileRef.current.value = "";
       setPage(1);
@@ -247,10 +251,10 @@ export function CfoProducts() {
           <h1>Product catalog</h1>
         </div>
         <p className="lede tight">
-          Upload inventory by company. Trifone reads August columns only from the
-          stock register; earlier months are ignored. Stock counts reflect live
-          balances updated by staff. Use the delete icons to remove unwanted rows
-          or columns from the catalog.
+          Upload inventory by company. Use <strong>Update catalog</strong> to refresh
+          location figures from a new month&apos;s Excel while keeping products not
+          in the file. Trifone reads August columns only; earlier months are ignored.
+          Stock counts reflect live balances updated by staff.
         </p>
       </header>
 
@@ -306,9 +310,43 @@ export function CfoProducts() {
             </p>
           )}
 
+          <fieldset className="upload-mode">
+            <legend>Upload mode</legend>
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="uploadMode"
+                value="update"
+                checked={uploadMode === "update"}
+                onChange={() => setUploadMode("update")}
+              />
+              <span>
+                <strong>Update catalog</strong> — refresh figures for products in the
+                file; add new products; keep existing products not in the file
+              </span>
+            </label>
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="uploadMode"
+                value="replace"
+                checked={uploadMode === "replace"}
+                onChange={() => setUploadMode("replace")}
+              />
+              <span>
+                <strong>Replace catalog</strong> — delete all current products and
+                import only what is in the file
+              </span>
+            </label>
+          </fieldset>
+
           <div className="actions">
             <button type="submit" disabled={busy}>
-              {busy ? "Uploading…" : `Upload ${activeCompany.label} catalog`}
+              {busy
+                ? "Uploading…"
+                : uploadMode === "replace"
+                  ? `Replace ${activeCompany.label} catalog`
+                  : `Update ${activeCompany.label} catalog`}
             </button>
           </div>
         </form>

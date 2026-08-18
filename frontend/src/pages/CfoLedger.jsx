@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel } from "../constants/companies";
+import { enteredByLabel } from "../utils/role.js";
 
 const PAGE_SIZE = 50;
 
@@ -211,7 +212,7 @@ export function CfoLedger() {
                     <th>In</th>
                     <th>Out</th>
                     <th>Closing</th>
-                    <th>Clerk</th>
+                    <th>Posted by</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -225,7 +226,7 @@ export function CfoLedger() {
                       <td>{fmt(row.inbound)}</td>
                       <td>{fmt(row.outbound)}</td>
                       <td className="num-strong">{fmt(row.closingBalance)}</td>
-                      <td>{row.enteredBy?.name || "—"}</td>
+                      <td>{enteredByLabel(row.enteredBy)}</td>
                     </tr>
                   ))}
                 </tbody>

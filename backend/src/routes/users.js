@@ -59,7 +59,7 @@ router.patch(
     }
 
     if (role !== undefined) {
-      const allowed = ["clerk", "cfo", "admin"];
+      const allowed = ["clerk", "cfo", "accountant", "admin"];
       if (!allowed.includes(role)) {
         return res.status(400).json({ message: "Invalid role" });
       }

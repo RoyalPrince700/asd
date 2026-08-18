@@ -22,6 +22,12 @@ const router = express.Router();
 
 router.use(protect, requireRole("cfo"));
 
+function enteredByLabel(user) {
+  if (!user?.name) return "";
+  if (user.role === "accountant") return `${user.name} (Accountant)`;
+  return user.name;
+}
+
 function buildFilter(query) {
   const filter = {};
 
@@ -66,7 +72,7 @@ function stamp() {
 
 async function loadReportData(query) {
   const records = await StockRecord.find(buildFilter(query))
-    .populate("enteredBy", "name email")
+    .populate("enteredBy", "name email role")
     .sort({ date: -1, createdAt: -1 });
   return { records, summary: summarizeRecords(records) };
 }
@@ -109,7 +115,7 @@ router.get("/excel", asyncHandler(async (req, res) => {
       stockReceived: row.stockReceived,
       stockOut: row.stockOut,
       closingBalance: row.closingBalance,
-      enteredBy: row.enteredBy?.name || "",
+      enteredBy: enteredByLabel(row.enteredBy),
     });
   }
 
@@ -307,7 +313,7 @@ router.get("/ledger/excel", asyncHandler(async (req, res) => {
     { header: "In", key: "inbound", width: 12 },
     { header: "Out", key: "outbound", width: 12 },
     { header: "Closing", key: "closingBalance", width: 14 },
-    { header: "Clerk", key: "enteredBy", width: 22 },
+    { header: "Posted by", key: "enteredBy", width: 22 },
   ];
 
   sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -327,7 +333,7 @@ router.get("/ledger/excel", asyncHandler(async (req, res) => {
       inbound: row.inbound,
       outbound: row.outbound,
       closingBalance: row.closingBalance,
-      enteredBy: row.enteredBy?.name || "",
+      enteredBy: enteredByLabel(row.enteredBy),
     });
   }
 
@@ -386,7 +392,7 @@ router.get("/ledger/docx", asyncHandler(async (req, res) => {
           cell(formatNumber(row.inbound), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.outbound), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.closingBalance), { align: AlignmentType.RIGHT }),
-          cell(row.enteredBy?.name || "—"),
+          cell(enteredByLabel(row.enteredBy) || "—"),
         ],
       })
   );

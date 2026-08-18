@@ -765,6 +765,37 @@ th {
   gap: 12px;
 }
 
+.upload-mode {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  display: grid;
+  gap: 10px;
+}
+
+.upload-mode legend {
+  padding: 0 4px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.radio-option input {
+  margin-top: 3px;
+}
+
+.radio-option span {
+  line-height: 1.45;
+}
+
 .file-drop {
   display: grid;
   gap: 8px;
@@ -1365,3 +1396,83 @@ input[readonly] {
   background: #f5f1ea;
   color: var(--muted);
 }
+
+.status-pill--pending {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.tab-bar .tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tab-bar .tab.active {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #fff;
+}
+
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+}
+
+.tab-bar .tab:not(.active) .tab-count {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.edit-diff {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.edit-diff-before {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.edit-diff-arrow {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.edit-diff-after {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.edit-review-table td {
+  vertical-align: top;
+}
+
+.row-pending {
+  background: #fffbf5;
+}
+

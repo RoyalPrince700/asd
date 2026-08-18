@@ -13,7 +13,7 @@ The CFO manages two separate catalogues from **Product catalog**:
 | **Accessible Publishers Limited (APL)** | Accessible | `BookName` + location stock counts |
 | **Trifone** | Trifone | Stock register with **August-only** columns |
 
-Uploading replaces the full catalogue for that company. A template can be downloaded from the same page.
+Uploading replaces the full catalogue for that company. Use **Update catalog** to refresh figures from a new month's Excel while keeping products not in the file. A template can be downloaded from the same page.
 
 #### APL catalogue columns
 

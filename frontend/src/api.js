@@ -83,10 +83,11 @@ export const api = {
       })}`
     ),
   stockSnapshot: () => request("/api/products/stock"),
-  uploadProducts: (file, company = "accessible") => {
+  uploadProducts: (file, company = "accessible", mode = "update") => {
     const body = new FormData();
     body.append("file", file);
     body.append("company", company);
+    body.append("mode", mode);
     return request("/api/products/upload", { method: "POST", body });
   },
   downloadProductTemplate: async (company = "accessible") => {
@@ -115,6 +116,15 @@ export const api = {
     request(`/api/records/${id}`, {
       method: "PUT",
       body: JSON.stringify(payload),
+    }),
+  recordChanges: (params = {}) =>
+    request(`/api/record-changes${query(params)}`),
+  approveRecordChange: (id) =>
+    request(`/api/record-changes/${id}/approve`, { method: "POST" }),
+  rejectRecordChange: (id, reason = "") =>
+    request(`/api/record-changes/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     }),
   deleteRecord: (id) =>
     request(`/api/records/${id}`, { method: "DELETE" }),

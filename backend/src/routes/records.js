@@ -11,6 +11,13 @@ const {
 const { COMPANIES, isValidCompany, ACCESSIBLE_LOCATIONS } = require("../constants/companies");
 const { isValidProductName } = require("../utils/products");
 const { getCurrentStock } = require("../utils/inventory");
+const RecordChange = require("../models/RecordChange");
+const {
+  snapshotRecord,
+  findPendingChange,
+  pendingChangeMapForRecords,
+  attachPendingMeta,
+} = require("../utils/recordChanges");
 
 const router = express.Router();
 
@@ -44,6 +51,51 @@ function buildFilter(query) {
   return filter;
 }
 
+function isAssignedStaff(user) {
+  if (user.assignedCompany === COMPANIES.TRIFONE) return true;
+  if (user.location) return true;
+  return false;
+}
+
+function validateAccountantRecordData(data) {
+  if (!data.company || !isValidCompany(data.company)) {
+    return "Select APL or Trifone.";
+  }
+
+  if (data.company === COMPANIES.TRIFONE) {
+    data.location = null;
+    return null;
+  }
+
+  if (!data.location || !ACCESSIBLE_LOCATIONS.includes(data.location)) {
+    return "Select an APL location.";
+  }
+
+  return null;
+}
+
+function applyClerkScope(data, user, existing = null) {
+  if (user.assignedCompany === COMPANIES.TRIFONE) {
+    if (data.company !== COMPANIES.TRIFONE) {
+      return "Your account is assigned to Trifone. You can only post Trifone records.";
+    }
+    data.location = null;
+  } else if (user.location) {
+    if (data.company !== COMPANIES.ACCESSIBLE) {
+      return `Your account is assigned to location ${user.location}. You can only post APL records.`;
+    }
+    if (existing?.location && existing.location !== user.location) {
+      return "You can only edit records for your assigned location.";
+    }
+    if (existing?.company && existing.company !== COMPANIES.ACCESSIBLE) {
+      return "You can only edit APL records.";
+    }
+    data.location = user.location;
+  }
+
+  return null;
+}
+
 router.get("/", asyncHandler(async (req, res) => {
   const filter = buildFilter(req.query);
 
@@ -54,6 +106,13 @@ router.get("/", asyncHandler(async (req, res) => {
     } else if (req.user.location) {
       filter.company = COMPANIES.ACCESSIBLE;
       filter.location = req.user.location;
+    }
+  } else if (req.user.role === "accountant") {
+    if (!filter.company) {
+      return res.status(400).json({ message: "Company filter is required." });
+    }
+    if (filter.company === COMPANIES.ACCESSIBLE && !filter.location) {
+      return res.status(400).json({ message: "Location filter is required for APL." });
     }
   }
 
@@ -68,8 +127,12 @@ router.get("/", asyncHandler(async (req, res) => {
       .skip((page - 1) * limit)
       .limit(limit);
 
+    const pendingMap = await pendingChangeMapForRecords(
+      records.map((record) => record._id)
+    );
+
     res.json({
-      records,
+      records: attachPendingMeta(records, pendingMap),
       total,
       page,
       limit,
@@ -82,7 +145,11 @@ router.get("/", asyncHandler(async (req, res) => {
     .populate("enteredBy", "name email role")
     .sort({ date: -1, createdAt: -1 });
 
-  res.json({ records });
+  const pendingMap = await pendingChangeMapForRecords(
+    records.map((record) => record._id)
+  );
+
+  res.json({ records: attachPendingMeta(records, pendingMap) });
 }));
 
 router.get("/products", asyncHandler(async (req, res) => {
@@ -98,6 +165,8 @@ router.get("/products", asyncHandler(async (req, res) => {
     } else if (req.user.location) {
       filter.company = COMPANIES.ACCESSIBLE;
     }
+  } else if (req.user.role === "accountant") {
+    return res.status(400).json({ message: "Company is required." });
   }
 
   const products = await Product.find(filter)
@@ -141,14 +210,8 @@ router.get("/my-summary", requireRole("clerk"), asyncHandler(async (req, res) =>
   });
 }));
 
-function isAssignedStaff(user) {
-  if (user.assignedCompany === COMPANIES.TRIFONE) return true;
-  if (user.location) return true;
-  return false;
-}
-
-router.post("/", requireRole("clerk"), asyncHandler(async (req, res) => {
-  if (!isAssignedStaff(req.user)) {
+router.post("/", requireRole("clerk", "accountant"), asyncHandler(async (req, res) => {
+  if (req.user.role === "clerk" && !isAssignedStaff(req.user)) {
     return res.status(403).json({
       message: "You have not been assigned yet. Contact CFO.",
     });
@@ -160,24 +223,18 @@ router.post("/", requireRole("clerk"), asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "Product is required" });
   }
 
-  if (!data.company || !isValidCompany(data.company)) {
-    return res.status(400).json({ message: "Select APL or Trifone." });
+  let scopeError = null;
+  if (req.user.role === "accountant") {
+    scopeError = validateAccountantRecordData(data);
+  } else {
+    if (!data.company || !isValidCompany(data.company)) {
+      return res.status(400).json({ message: "Select APL or Trifone." });
+    }
+    scopeError = applyClerkScope(data, req.user);
   }
 
-  if (req.user.assignedCompany === COMPANIES.TRIFONE) {
-    if (data.company !== COMPANIES.TRIFONE) {
-      return res.status(403).json({
-        message: "Your account is assigned to Trifone. You can only post Trifone records.",
-      });
-    }
-    data.location = null;
-  } else if (req.user.location) {
-    if (data.company !== COMPANIES.ACCESSIBLE) {
-      return res.status(403).json({
-        message: `Your account is assigned to location ${req.user.location}. You can only post APL records.`,
-      });
-    }
-    data.location = req.user.location;
+  if (scopeError) {
+    return res.status(403).json({ message: scopeError });
   }
 
   if (!(await isValidProductName(data.productName, data.company))) {
@@ -206,12 +263,12 @@ router.post("/", requireRole("clerk"), asyncHandler(async (req, res) => {
     enteredBy: req.user._id,
   });
 
-  const populated = await record.populate("enteredBy", "name email role location");
+  const populated = await record.populate("enteredBy", "name email role");
   res.status(201).json({ record: populated });
 }));
 
-router.put("/:id", requireRole("clerk"), asyncHandler(async (req, res) => {
-  if (!isAssignedStaff(req.user)) {
+router.put("/:id", requireRole("clerk", "accountant"), asyncHandler(async (req, res) => {
+  if (req.user.role === "clerk" && !isAssignedStaff(req.user)) {
     return res.status(403).json({
       message: "You have not been assigned yet. Contact CFO.",
     });
@@ -223,8 +280,16 @@ router.put("/:id", requireRole("clerk"), asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Record not found" });
   }
 
-  if (String(existing.enteredBy) !== String(req.user._id)) {
+  if (req.user.role === "clerk" && String(existing.enteredBy) !== String(req.user._id)) {
     return res.status(403).json({ message: "You can only edit your own records" });
+  }
+
+  const pending = await findPendingChange(existing._id);
+  if (pending) {
+    return res.status(409).json({
+      message:
+        "This transaction already has a pending edit awaiting CFO approval.",
+    });
   }
 
   const data = normalizeRecordInput(req.body);
@@ -233,30 +298,18 @@ router.put("/:id", requireRole("clerk"), asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "Product is required" });
   }
 
-  if (!data.company || !isValidCompany(data.company)) {
-    return res.status(400).json({ message: "Select APL or Trifone." });
+  let scopeError = null;
+  if (req.user.role === "accountant") {
+    scopeError = validateAccountantRecordData(data);
+  } else {
+    if (!data.company || !isValidCompany(data.company)) {
+      return res.status(400).json({ message: "Select APL or Trifone." });
+    }
+    scopeError = applyClerkScope(data, req.user, existing);
   }
 
-  if (req.user.assignedCompany === COMPANIES.TRIFONE) {
-    if (data.company !== COMPANIES.TRIFONE) {
-      return res.status(403).json({
-        message: "Your account is assigned to Trifone. You can only edit Trifone records.",
-      });
-    }
-    if (existing.company !== COMPANIES.TRIFONE) {
-      return res.status(403).json({ message: "You can only edit Trifone records." });
-    }
-    data.location = null;
-  } else if (req.user.location) {
-    if (data.company !== COMPANIES.ACCESSIBLE) {
-      return res.status(403).json({
-        message: `Your account is assigned to location ${req.user.location}. You can only edit APL records.`,
-      });
-    }
-    if (existing.location && existing.location !== req.user.location) {
-      return res.status(403).json({ message: "You can only edit records for your assigned location." });
-    }
-    data.location = req.user.location;
+  if (scopeError) {
+    return res.status(403).json({ message: scopeError });
   }
 
   if (!(await isValidProductName(data.productName, data.company))) {
@@ -280,20 +333,40 @@ router.put("/:id", requireRole("clerk"), asyncHandler(async (req, res) => {
     });
   }
 
+  const originalSnapshot = snapshotRecord(existing);
+
   Object.assign(existing, data);
   await existing.save();
-  const populated = await existing.populate("enteredBy", "name email role location");
-  res.json({ record: populated });
+
+  const change = await RecordChange.create({
+    recordId: existing._id,
+    originalSnapshot,
+    proposed: snapshotRecord(existing),
+    submittedBy: req.user._id,
+  });
+
+  const populated = await existing.populate("enteredBy", "name email role");
+  res.json({
+    record: {
+      ...populated.toObject(),
+      pendingApproval: true,
+      pendingChangeId: change._id,
+      pendingSubmittedAt: change.createdAt,
+    },
+    pendingApproval: true,
+    changeId: change._id,
+    message: "Edit saved and sent to CFO for approval.",
+  });
 }));
 
-router.delete("/:id", requireRole("clerk"), asyncHandler(async (req, res) => {
+router.delete("/:id", requireRole("clerk", "accountant"), asyncHandler(async (req, res) => {
   const existing = await StockRecord.findById(req.params.id);
 
   if (!existing) {
     return res.status(404).json({ message: "Record not found" });
   }
 
-  if (String(existing.enteredBy) !== String(req.user._id)) {
+  if (req.user.role === "clerk" && String(existing.enteredBy) !== String(req.user._id)) {
     return res.status(403).json({ message: "You can only delete your own records" });
   }
 

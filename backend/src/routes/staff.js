@@ -49,7 +49,7 @@ router.use(protect, requireRole("cfo"));
 router.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const staff = await User.find({ role: "clerk" })
+    const staff = await User.find({ role: { $in: ["clerk", "accountant"] } })
       .sort({ createdAt: -1 })
       .select("-password");
     res.json({ staff: staff.map(publicStaff) });
@@ -64,11 +64,30 @@ router.patch(
       return res.status(404).json({ message: "Staff member not found" });
     }
 
-    if (user.role !== "clerk") {
-      return res.status(400).json({ message: "Only clerk accounts can be assigned." });
+    if (user.role !== "clerk" && user.role !== "accountant") {
+      return res.status(400).json({
+        message: "Only clerk or accountant accounts can be managed here.",
+      });
     }
 
-    const { assignment, location, assignedCompany } = req.body;
+    const { assignment, location, assignedCompany, role } = req.body;
+
+    if (role !== undefined) {
+      const allowed = ["clerk", "accountant"];
+      if (!allowed.includes(role)) {
+        return res.status(400).json({ message: "Role must be clerk or accountant." });
+      }
+      user.role = role;
+      if (role === "accountant") {
+        user.assignedCompany = null;
+        user.location = null;
+      }
+    }
+
+    if (user.role === "accountant") {
+      await user.save();
+      return res.json({ staff: publicStaff(user) });
+    }
 
     try {
       if (assignment !== undefined) {
@@ -83,8 +102,8 @@ router.patch(
         } else {
           return res.status(400).json({ message: "Provide a Trifone assignment or an APL location." });
         }
-      } else {
-        return res.status(400).json({ message: "Assignment is required." });
+      } else if (role === undefined) {
+        return res.status(400).json({ message: "Assignment or role is required." });
       }
     } catch (err) {
       return res.status(400).json({ message: err.message });

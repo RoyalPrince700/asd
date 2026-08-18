@@ -4,7 +4,7 @@ import { useDialog } from "../context/DialogContext.jsx";
 import { api } from "../api";
 import { roleLabel } from "../utils/role.js";
 
-const ROLES = ["clerk", "cfo", "admin"];
+const ROLES = ["clerk", "accountant", "cfo", "admin"];
 
 export function AdminHome() {
   const { user } = useAuth();

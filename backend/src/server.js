@@ -9,6 +9,7 @@ const { connectDb } = require("./config/db");
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
 const recordRoutes = require("./routes/records");
+const recordChangeRoutes = require("./routes/recordChanges");
 const productRoutes = require("./routes/products");
 const categoryRoutes = require("./routes/categories");
 const staffRoutes = require("./routes/staff");
@@ -34,6 +35,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/records", recordRoutes);
+app.use("/api/record-changes", recordChangeRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/staff", staffRoutes);

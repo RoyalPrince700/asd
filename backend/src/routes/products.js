@@ -126,18 +126,39 @@ function resolveStaffAssignment(user) {
   return null;
 }
 
-router.get("/my-inventory", requireRole("clerk"), asyncHandler(async (req, res) => {
-  const assignment = resolveStaffAssignment(req.user);
-  if (!assignment) {
-    return res.status(403).json({
-      message: "You have not been assigned yet. Contact CFO.",
-    });
+router.get("/my-inventory", requireRole("clerk", "accountant"), asyncHandler(async (req, res) => {
+  let company;
+  let location;
+
+  if (req.user.role === "accountant") {
+    company = resolveCompany(req.query.company);
+    if (!company) {
+      return res.status(400).json({ message: "Company is required." });
+    }
+    if (company === COMPANIES.ACCESSIBLE) {
+      location = req.query.location
+        ? String(req.query.location).trim().toUpperCase()
+        : null;
+      if (!location || !ACCESSIBLE_LOCATIONS.includes(location)) {
+        return res.status(400).json({ message: "APL location is required." });
+      }
+    } else {
+      location = null;
+    }
+  } else {
+    const assignment = resolveStaffAssignment(req.user);
+    if (!assignment) {
+      return res.status(403).json({
+        message: "You have not been assigned yet. Contact CFO.",
+      });
+    }
+    company = assignment.company;
+    location = assignment.location;
   }
 
   const search = String(req.query.search || "").trim();
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
-  const { company, location } = assignment;
 
   const filter = { company };
   if (search) {
@@ -381,6 +402,103 @@ router.get("/template", requireRole("cfo"), asyncHandler(async (req, res) => {
   res.end();
 }));
 
+function resolveUploadMode(value) {
+  const mode = String(value || "update").trim().toLowerCase();
+  return mode === "replace" ? "replace" : "update";
+}
+
+async function importCatalogRows(company, rows, userId, mode) {
+  const label = COMPANY_LABELS[company];
+  const existingBefore = await Product.countDocuments({ company });
+
+  if (mode === "replace") {
+    await Product.deleteMany({ company });
+    await CatalogConfig.findOneAndUpdate(
+      { company },
+      { hiddenColumns: [] },
+      { upsert: true }
+    );
+
+    if (company === COMPANIES.TRIFONE) {
+      await Product.insertMany(
+        rows.map((row) => ({
+          name: row.name,
+          company,
+          trifoneData: row.trifoneData,
+          uploadedBy: userId,
+        }))
+      );
+    } else {
+      await Product.insertMany(
+        rows.map((row) => ({
+          name: row.name,
+          company,
+          stock: row.stock,
+          uploadedBy: userId,
+        }))
+      );
+    }
+
+    const total = await Product.countDocuments({ company });
+    return {
+      message: `${rows.length} product(s) imported for ${label}. Previous ${label} catalog entries were replaced.`,
+      mode,
+      imported: rows.length,
+      added: rows.length,
+      updated: 0,
+      kept: 0,
+      removed: existingBefore,
+      total,
+      count: total,
+      company,
+    };
+  }
+
+  const bulkOps = rows.map((row) => ({
+    updateOne: {
+      filter: { company, name: row.name },
+      update: {
+        $set: {
+          company,
+          name: row.name,
+          uploadedBy: userId,
+          ...(company === COMPANIES.TRIFONE
+            ? { trifoneData: row.trifoneData }
+            : { stock: row.stock }),
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  const bulkResult = await Product.bulkWrite(bulkOps, { ordered: false });
+  const added = bulkResult.upsertedCount || 0;
+  const updated = bulkResult.modifiedCount || 0;
+  const matchedExisting = Math.max(0, (bulkResult.matchedCount || 0) - updated);
+  const kept = Math.max(0, existingBefore - (bulkResult.matchedCount || 0));
+  const total = await Product.countDocuments({ company });
+
+  const parts = [];
+  if (added) parts.push(`${added} new`);
+  if (updated) parts.push(`${updated} updated`);
+  if (matchedExisting) parts.push(`${matchedExisting} unchanged in file`);
+  if (kept) parts.push(`${kept} kept from previous catalog`);
+
+  return {
+    message: `Catalog updated for ${label}: ${parts.join(", ")}. Total products: ${total}.`,
+    mode,
+    imported: rows.length,
+    added,
+    updated,
+    unchanged: matchedExisting,
+    kept,
+    removed: 0,
+    total,
+    count: total,
+    company,
+  };
+}
+
 router.post(
   "/upload",
   requireRole("cfo"),
@@ -396,6 +514,8 @@ router.post(
     if (!company) {
       return res.status(400).json({ message: "Invalid company." });
     }
+
+    const mode = resolveUploadMode(req.body.mode || req.query.mode);
 
     let rows = [];
     if (company === COMPANIES.TRIFONE) {
@@ -413,43 +533,7 @@ router.post(
       });
     }
 
-    await Product.deleteMany({ company });
-    await CatalogConfig.findOneAndUpdate(
-      { company },
-      { hiddenColumns: [] },
-      { upsert: true }
-    );
-
-    if (company === COMPANIES.TRIFONE) {
-      await Product.insertMany(
-        rows.map((row) => ({
-          name: row.name,
-          company,
-          trifoneData: row.trifoneData,
-          uploadedBy: req.user._id,
-        }))
-      );
-    } else {
-      await Product.insertMany(
-        rows.map((row) => ({
-          name: row.name,
-          company,
-          stock: row.stock,
-          uploadedBy: req.user._id,
-        }))
-      );
-    }
-
-    const total = await Product.countDocuments({ company });
-    const label = COMPANY_LABELS[company];
-
-    res.json({
-      message: `${rows.length} product(s) imported for ${label}. Previous ${label} catalog entries were replaced.`,
-      imported: rows.length,
-      total,
-      count: total,
-      company,
-    });
+    res.json(await importCatalogRows(company, rows, req.user._id, mode));
   })
 );
 

@@ -13,7 +13,10 @@ import { CfoLedger } from "./pages/CfoLedger.jsx";
 import { CfoProducts } from "./pages/CfoProducts.jsx";
 import { CfoStaff } from "./pages/CfoStaff.jsx";
 import { CfoAnalysis } from "./pages/CfoAnalysis.jsx";
+import { CfoEditedLedger } from "./pages/CfoEditedLedger.jsx";
 import { AdminHome } from "./pages/AdminHome.jsx";
+import { AccountantMovement } from "./pages/AccountantMovement.jsx";
+import { AccountantInventory } from "./pages/AccountantInventory.jsx";
 import { homeForRole } from "./utils/role.js";
 
 export default function App() {
@@ -64,6 +67,22 @@ export default function App() {
             }
           />
           <Route
+            path="/accountant/movement"
+            element={
+              <ProtectedRoute role="accountant">
+                <AccountantMovement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/accountant/inventory"
+            element={
+              <ProtectedRoute role="accountant">
+                <AccountantInventory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/overview"
             element={
               <ProtectedRoute role="cfo">
@@ -76,6 +95,14 @@ export default function App() {
             element={
               <ProtectedRoute role="cfo">
                 <CfoLedger />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/edited-ledger"
+            element={
+              <ProtectedRoute role="cfo">
+                <CfoEditedLedger />
               </ProtectedRoute>
             }
           />

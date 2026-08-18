@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { SearchableSelect } from "../components/SearchableSelect.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
-import { companyLabel } from "../constants/companies";
-import { staffAssignmentLabel, staffCompany } from "../utils/staff.js";
+import {
+  ACCESSIBLE_LOCATIONS,
+  COMPANY_OPTIONS,
+  companyLabel,
+} from "../constants/companies";
 
 const emptyForm = {
   productName: "",
@@ -24,14 +26,11 @@ function fmt(value) {
   });
 }
 
-export function StaffMovement() {
-  const { user } = useAuth();
+export function AccountantMovement() {
   const { confirm, toast } = useDialog();
 
-  const company = staffCompany(user);
-  const assignmentLabel = staffAssignmentLabel(user);
-  const isTrifoneStaff = user?.assignedCompany === "trifone";
-
+  const [company, setCompany] = useState("accessible");
+  const [location, setLocation] = useState("HO");
   const [form, setForm] = useState(emptyForm);
   const [products, setProducts] = useState([]);
   const [records, setRecords] = useState([]);
@@ -40,6 +39,9 @@ export function StaffMovement() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const isTrifone = company === "trifone";
+  const scopeReady = isTrifone || Boolean(location);
 
   const closing = useMemo(
     () => openingBalance + n(form.inbound) - n(form.outbound),
@@ -55,22 +57,27 @@ export function StaffMovement() {
   }, [products, form.productName]);
 
   async function loadRecords() {
-    const data = await api.records();
+    if (!scopeReady) return;
+    const params = { company };
+    if (!isTrifone) params.location = location;
+    const data = await api.records(params);
     setRecords(data.records);
   }
 
   async function loadProducts() {
+    if (!scopeReady) return;
     const data = await api.products({ company });
     setProducts(data.products);
   }
 
   useEffect(() => {
+    if (!scopeReady) return;
     loadProducts().catch((err) => setError(err.message));
     loadRecords().catch((err) => setError(err.message));
-  }, [company]);
+  }, [company, location, scopeReady]);
 
   useEffect(() => {
-    if (!form.productName) {
+    if (!form.productName || !scopeReady) {
       setOpeningBalance(0);
       return;
     }
@@ -80,11 +87,11 @@ export function StaffMovement() {
         form.productName,
         company,
         editingId,
-        user?.location || undefined
+        isTrifone ? undefined : location
       )
       .then((data) => setOpeningBalance(data.openingBalance))
       .catch((err) => setError(err.message));
-  }, [form.productName, company, editingId, user?.location]);
+  }, [form.productName, company, location, editingId, isTrifone, scopeReady]);
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -97,6 +104,8 @@ export function StaffMovement() {
 
   async function onSubmit(e) {
     e.preventDefault();
+    if (!scopeReady) return;
+
     setBusy(true);
     setError("");
     setNotice("");
@@ -110,6 +119,7 @@ export function StaffMovement() {
         stockReceived: 0,
         stockOut: 0,
       };
+      if (!isTrifone) payload.location = location;
 
       if (editingId) {
         const result = await api.updateRecord(editingId, payload);
@@ -176,13 +186,13 @@ export function StaffMovement() {
     <div className="page">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Data clerk · {assignmentLabel}</p>
+          <p className="eyebrow">Accountant · CFO department</p>
           <h1>Stock movement</h1>
         </div>
         <p className="lede tight">
-          Select a {isTrifoneStaff ? "item" : "book"}, enter In or Out, then post
-          the transaction. Edits to existing transactions apply immediately for you
-          but are sent to the CFO for approval before they become permanent.
+          Select a company and location, then post In or Out on behalf of any clerk.
+          Edits to existing transactions apply immediately but are sent to the CFO
+          for approval before they become permanent.
         </p>
       </header>
 
@@ -190,12 +200,36 @@ export function StaffMovement() {
         <div className="grid-3">
           <label>
             Company
-            <input type="text" value={companyLabel(company)} readOnly />
+            <select
+              value={company}
+              onChange={(e) => {
+                setCompany(e.target.value);
+                resetForm();
+              }}
+            >
+              {COMPANY_OPTIONS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
           </label>
-          {!isTrifoneStaff ? (
+          {!isTrifone ? (
             <label>
               Location
-              <input type="text" value={user?.location || ""} readOnly />
+              <select
+                value={location}
+                onChange={(e) => {
+                  setLocation(e.target.value);
+                  resetForm();
+                }}
+              >
+                {ACCESSIBLE_LOCATIONS.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
             </label>
           ) : null}
           <label>
@@ -211,12 +245,12 @@ export function StaffMovement() {
 
         <div className="grid-3">
           <label>
-            {isTrifoneStaff ? "Item" : "Product"}
+            {isTrifone ? "Item" : "Product"}
             <SearchableSelect
               options={productOptions}
               value={form.productName}
               onChange={(name) => setField("productName", name)}
-              placeholder={isTrifoneStaff ? "Search items…" : "Search books…"}
+              placeholder={isTrifone ? "Search items…" : "Search books…"}
               required
             />
           </label>
@@ -262,7 +296,10 @@ export function StaffMovement() {
         {notice ? <p className="ok">{notice}</p> : null}
 
         <div className="actions">
-          <button type="submit" disabled={busy || closing < 0 || !form.productName}>
+          <button
+            type="submit"
+            disabled={busy || closing < 0 || !form.productName || !scopeReady}
+          >
             {editingId ? "Submit edit for approval" : "Post transaction"}
           </button>
           {editingId ? (
@@ -275,7 +312,10 @@ export function StaffMovement() {
 
       <section className="table-wrap">
         <div className="section-head">
-          <h2>Your transactions</h2>
+          <h2>
+            {companyLabel(company, { short: true })}
+            {!isTrifone ? ` · ${location}` : ""} transactions
+          </h2>
           <span>{records.length} records</span>
         </div>
         <div className="table-scroll">
@@ -283,11 +323,12 @@ export function StaffMovement() {
             <thead>
               <tr>
                 <th>Date</th>
-                <th>{isTrifoneStaff ? "Item" : "Product"}</th>
+                <th>{isTrifone ? "Item" : "Product"}</th>
                 <th>Opening</th>
                 <th>In</th>
                 <th>Out</th>
                 <th>Closing</th>
+                <th>Posted by</th>
                 <th>Status</th>
                 <th />
               </tr>
@@ -295,8 +336,8 @@ export function StaffMovement() {
             <tbody>
               {records.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="hint">
-                    No transactions yet. Post your first In or Out above.
+                  <td colSpan={9} className="hint">
+                    No transactions for this company and location yet.
                   </td>
                 </tr>
               ) : (
@@ -308,6 +349,11 @@ export function StaffMovement() {
                     <td>{fmt(row.inbound)}</td>
                     <td>{fmt(row.outbound)}</td>
                     <td className="num-strong">{fmt(row.closingBalance)}</td>
+                    <td>
+                      {row.enteredBy?.role === "accountant"
+                        ? `${row.enteredBy.name} (Accountant)`
+                        : row.enteredBy?.name || "—"}
+                    </td>
                     <td>
                       {row.pendingApproval ? (
                         <span className="status-pill status-pill--pending">
