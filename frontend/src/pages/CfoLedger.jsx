@@ -1,19 +1,9 @@
-import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel } from "../constants/companies";
+
+const PAGE_SIZE = 50;
 
 function fmt(value) {
   return Number(value || 0).toLocaleString("en-US", {
@@ -21,23 +11,7 @@ function fmt(value) {
   });
 }
 
-const emptySummary = {
-  totals: {
-    openingBalance: 0,
-    inbound: 0,
-    outbound: 0,
-    stockReceived: 0,
-    stockOut: 0,
-    closingBalance: 0,
-    netMovement: 0,
-    recordCount: 0,
-  },
-  byProduct: [],
-  byCompany: [],
-  byDate: [],
-};
-
-export function CfoHome() {
+export function CfoLedger() {
   const [filters, setFilters] = useState({
     productName: "",
     company: "",
@@ -52,8 +26,12 @@ export function CfoHome() {
     from: "",
     to: "",
   });
-  const [summary, setSummary] = useState(emptySummary);
+  const [records, setRecords] = useState([]);
   const [products, setProducts] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState("");
 
@@ -62,39 +40,41 @@ export function CfoHome() {
     return products.filter((product) => product.company === filters.company);
   }, [products, filters.company]);
 
-  const chartCompanies = useMemo(
-    () =>
-      summary.byCompany.map((row) => ({
-        ...row,
-        label: companyLabel(row.company, { short: true }),
-      })),
-    [summary.byCompany]
-  );
-
-  async function load(params = applied) {
-    const [sum, prod] = await Promise.all([
-      api.summary(params),
-      api.products(),
-    ]);
-    setSummary(sum);
-    setProducts(prod.products);
+  async function loadList(nextPage = page, params = applied) {
+    setLoading(true);
+    setError("");
+    try {
+      const [rec, prod] = await Promise.all([
+        api.records({ ...params, page: nextPage, limit: PAGE_SIZE }),
+        api.products(),
+      ]);
+      setRecords(rec.records);
+      setTotal(rec.total ?? rec.records.length);
+      setPage(rec.page ?? nextPage);
+      setTotalPages(rec.totalPages ?? 1);
+      setProducts(prod.products);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err.message));
+    loadList(1).catch((err) => setError(err.message));
   }, []);
 
   function applyFilters(e) {
     e.preventDefault();
     setApplied(filters);
-    load(filters).catch((err) => setError(err.message));
+    loadList(1, filters).catch((err) => setError(err.message));
   }
 
   async function download(type) {
     setDownloading(type);
     setError("");
     try {
-      await api.downloadReport(type, applied);
+      await api.downloadLedgerReport(type, applied);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -102,14 +82,19 @@ export function CfoHome() {
     }
   }
 
-  const t = summary.totals;
+  const start = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const end = Math.min(page * PAGE_SIZE, total);
 
   return (
     <div className="page">
       <header className="page-head split">
         <div>
           <p className="eyebrow">Chief Financial Officer</p>
-          <h1>Stock position</h1>
+          <h1>Ledger lines</h1>
+          <p className="lede tight">
+            Live feed of clerk postings. Filter by company, product, location, or date range,
+            then export the full listing.
+          </p>
         </div>
         <div className="export-row">
           <button
@@ -204,83 +189,83 @@ export function CfoHome() {
 
       {error ? <p className="alert">{error}</p> : null}
 
-      <section className="kpi-grid">
-        <Kpi
-          label="Products in catalog"
-          value={products.length.toLocaleString()}
-          hint="Uploaded by CFO"
-        />
-        <Kpi
-          label="Companies"
-          value={COMPANY_OPTIONS.length.toLocaleString()}
-          hint="APL and Trifone"
-        />
-        <Kpi label="Opening" value={fmt(t.openingBalance)} />
-        <Kpi label="In" value={fmt(t.inbound)} tone="up" />
-        <Kpi label="Out" value={fmt(t.outbound)} tone="down" />
-        <Kpi
-          label="Closing"
-          value={fmt(t.closingBalance)}
-          hint={`${t.recordCount} records · net ${fmt(t.netMovement)}`}
-          featured
-        />
-      </section>
-
-      <section className="chart-grid">
-        <article className="panel">
-          <h2>Daily movement</h2>
-          <div className="chart">
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={summary.byDate}>
-                <CartesianGrid stroke="#e7e0d4" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="inbound" name="In" stroke="#1f6b4a" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="outbound" name="Out" stroke="#9a3412" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="closingBalance" name="Closing" stroke="#132337" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </article>
-        <article className="panel">
-          <h2>Closing by company</h2>
-          <div className="chart">
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartCompanies}>
-                <CartesianGrid stroke="#e7e0d4" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={-18} textAnchor="end" height={70} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="closingBalance" name="Closing balance" fill="#132337" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </article>
-      </section>
-
-      <section className="panel ledger-link-card">
+      <section className="table-wrap">
         <div className="section-head">
-          <h2>Ledger lines</h2>
-          <Link to="/ledger" className="text-btn">
-            View all ledger lines →
-          </Link>
+          <h2>All ledger lines</h2>
+          <span>{total.toLocaleString()} records</span>
         </div>
-        <p className="hint">
-          Browse, filter, and export the full clerk posting history on the dedicated ledger page.
-        </p>
+
+        {loading ? (
+          <p className="hint empty-hint">Loading ledger lines…</p>
+        ) : records.length ? (
+          <>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Company</th>
+                    <th>Location</th>
+                    <th>Product</th>
+                    <th>Opening</th>
+                    <th>In</th>
+                    <th>Out</th>
+                    <th>Closing</th>
+                    <th>Clerk</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((row) => (
+                    <tr key={row._id}>
+                      <td>{row.date.slice(0, 10)}</td>
+                      <td>{companyLabel(row.company, { short: true })}</td>
+                      <td>{row.location || "—"}</td>
+                      <td>{row.productName}</td>
+                      <td>{fmt(row.openingBalance)}</td>
+                      <td>{fmt(row.inbound)}</td>
+                      <td>{fmt(row.outbound)}</td>
+                      <td className="num-strong">{fmt(row.closingBalance)}</td>
+                      <td>{row.enteredBy?.name || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pagination">
+              <span>
+                Showing {start}–{end} of {total.toLocaleString()}
+              </span>
+              <div className="pagination-actions">
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={page <= 1 || loading}
+                  onClick={() => loadList(page - 1, applied)}
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={page >= totalPages || loading}
+                  onClick={() => loadList(page + 1, applied)}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="hint empty-hint">
+            No ledger lines match the current filters.{" "}
+            <Link to="/overview">Return to overview</Link>
+          </p>
+        )}
       </section>
     </div>
-  );
-}
-
-function Kpi({ label, value, hint, tone, featured }) {
-  return (
-    <article className={`kpi ${featured ? "featured" : ""} ${tone || ""}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {hint ? <small>{hint}</small> : null}
-    </article>
   );
 }

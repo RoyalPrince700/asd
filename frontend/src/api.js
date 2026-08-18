@@ -1,5 +1,7 @@
 const TOKEN_KEY = "cfo_token";
 
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -20,7 +22,7 @@ async function request(path, options = {}) {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(path, { ...options, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (options.blob) {
     if (!res.ok) {
@@ -49,6 +51,12 @@ export const api = {
       body: JSON.stringify({ name, email, password }),
     }),
   me: () => request("/api/auth/me"),
+  staff: () => request("/api/staff"),
+  updateStaff: (id, payload) =>
+    request(`/api/staff/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   users: () => request("/api/users"),
   updateUser: (id, payload) =>
     request(`/api/users/${id}`, {
@@ -59,36 +67,36 @@ export const api = {
   records: (params = {}) =>
     request(`/api/records${query(params)}`),
   products: (params = {}) => request(`/api/products${query(params)}`),
-  categories: () => request("/api/categories"),
-  createCategory: (name) =>
-    request("/api/categories", {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    }),
-  deleteCategory: (name) =>
-    request(`/api/categories/${encodeURIComponent(name)}`, {
+  deleteProduct: (id) => request(`/api/products/${id}`, { method: "DELETE" }),
+  deleteProductColumn: (company, column) =>
+    request(`/api/products/column/${encodeURIComponent(column)}${query({ company })}`, {
       method: "DELETE",
     }),
-  stockLevel: (productName, category, excludeRecordId) =>
+  myInventory: (params = {}) => request(`/api/products/my-inventory${query(params)}`),
+  stockLevel: (productName, company, excludeRecordId, location) =>
     request(
       `/api/products/stock-level${query({
         productName,
-        category,
+        company,
         excludeRecordId,
+        location,
       })}`
     ),
   stockSnapshot: () => request("/api/products/stock"),
-  uploadProducts: (file) => {
+  uploadProducts: (file, company = "accessible") => {
     const body = new FormData();
     body.append("file", file);
+    body.append("company", company);
     return request("/api/products/upload", { method: "POST", body });
   },
-  downloadProductTemplate: async () => {
-    const blob = await request("/api/products/template", { blob: true });
+  downloadProductTemplate: async (company = "accessible") => {
+    const blob = await request(`/api/products/template${query({ company })}`, {
+      blob: true,
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "product-catalog-template.xlsx";
+    a.download = `${company}-catalog-template.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -96,6 +104,8 @@ export const api = {
   },
   summary: (params = {}) =>
     request(`/api/records/summary${query(params)}`),
+  mySummary: (params = {}) =>
+    request(`/api/records/my-summary${query(params)}`),
   createRecord: (payload) =>
     request("/api/records", {
       method: "POST",
@@ -117,6 +127,34 @@ export const api = {
     const a = document.createElement("a");
     a.href = url;
     a.download = `cfo-stock-report.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  downloadLedgerReport: async (type, params = {}) => {
+    const blob = await request(`/api/reports/ledger/${type}${query(params)}`, {
+      blob: true,
+    });
+    const ext = type === "excel" ? "xlsx" : "docx";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cfo-ledger-lines.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  analysis: (params = {}) => request(`/api/analysis${query(params)}`),
+  downloadAnalysisMarkdown: async (params = {}) => {
+    const blob = await request(`/api/analysis/markdown${query(params)}`, {
+      blob: true,
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cfo-analysis-${new Date().toISOString().slice(0, 10)}.md`;
     document.body.appendChild(a);
     a.click();
     a.remove();

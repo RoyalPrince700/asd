@@ -1,27 +1,38 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
+  BarChart3,
   ClipboardList,
+  Clock,
   LayoutDashboard,
   LogOut,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  ScrollText,
   Users,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { roleLabel } from "../utils/role.js";
+import { isAssignedStaff } from "../utils/staff.js";
 
 const NAV_BY_ROLE = {
   admin: [{ to: "/admin", label: "Users", icon: Users }],
   cfo: [
     { to: "/overview", label: "Overview", icon: LayoutDashboard },
+    { to: "/analysis", label: "Analysis", icon: BarChart3 },
+    { to: "/ledger", label: "Ledger lines", icon: ScrollText },
     { to: "/products", label: "Product catalog", icon: Package },
+    { to: "/staff", label: "Staff", icon: Users },
   ],
-  clerk: [
-    { to: "/entry", label: "Stock movement dashboard", icon: ClipboardList },
-  ],
+  clerk: [{ to: "/entry", label: "Pending assignment", icon: Clock }],
 };
+
+const ASSIGNED_CLERK_NAV = [
+  { to: "/staff/overview", label: "Overview", icon: LayoutDashboard },
+  { to: "/entry", label: "Stock movement", icon: ClipboardList },
+  { to: "/staff/inventory", label: "Inventory", icon: Package },
+];
 
 export function Layout() {
   const { user, logout } = useAuth();
@@ -37,14 +48,18 @@ export function Layout() {
     });
   };
 
-  const navItems = NAV_BY_ROLE[user.role] ?? NAV_BY_ROLE.clerk;
+  const navItems = useMemo(() => {
+    if (user.role === "clerk" && isAssignedStaff(user)) {
+      return ASSIGNED_CLERK_NAV;
+    }
+    return NAV_BY_ROLE[user.role] ?? NAV_BY_ROLE.clerk;
+  }, [user]);
 
   return (
     <div className={`shell${collapsed ? " shell--collapsed" : ""}`}>
       <aside className={`rail${collapsed ? " rail--collapsed" : ""}`}>
         <div className="rail-top">
-          <div className="brand">
-            <span className="brand-mark">ASD</span>
+          <div className="brand" title="Accessible Stock Dashboard">
             <div className="brand-text">
               <strong>Accessible Stock Dashboard</strong>
               <small>Stock control</small>
@@ -74,7 +89,14 @@ export function Layout() {
           <div className="avatar">{user.name.slice(0, 1)}</div>
           <div className="rail-user-info">
             <strong>{user.name}</strong>
-            <small>{roleLabel(user.role)}</small>
+            <small>
+              {roleLabel(user.role)}
+              {user.assignedCompany === "trifone"
+                ? " · Trifone"
+                : user.location
+                  ? ` · ${user.location}`
+                  : ""}
+            </small>
           </div>
           <button
             type="button"

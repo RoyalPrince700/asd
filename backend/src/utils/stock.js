@@ -14,7 +14,7 @@ function computeClosingBalance(fields) {
 
 function normalizeRecordInput(body) {
   const productName = String(body.productName || "").trim();
-  const category = String(body.category || "").trim();
+  const company = String(body.company || "").trim().toLowerCase();
   const date = body.date ? new Date(body.date) : new Date();
   const openingBalance = toNumber(body.openingBalance);
   const inbound = toNumber(body.inbound ?? body.in);
@@ -31,7 +31,8 @@ function normalizeRecordInput(body) {
 
   return {
     productName,
-    category,
+    company,
+    location: body.location ? String(body.location).trim().toUpperCase() : null,
     date,
     openingBalance,
     inbound,
@@ -108,11 +109,11 @@ function summarizeRecords(records) {
     byDateMap.set(key, current);
   }
 
-  const byCategoryMap = new Map();
+  const byCompanyMap = new Map();
   for (const row of records) {
-    const key = row.category || "Uncategorized";
-    const current = byCategoryMap.get(key) || {
-      category: key,
+    const key = row.company || "unknown";
+    const current = byCompanyMap.get(key) || {
+      company: key,
       openingBalance: 0,
       inbound: 0,
       outbound: 0,
@@ -128,7 +129,7 @@ function summarizeRecords(records) {
     current.stockOut += row.stockOut;
     current.closingBalance += row.closingBalance;
     current.recordCount += 1;
-    byCategoryMap.set(key, current);
+    byCompanyMap.set(key, current);
   }
 
   return {
@@ -136,8 +137,8 @@ function summarizeRecords(records) {
     byProduct: [...byProductMap.values()].sort((a, b) =>
       a.productName.localeCompare(b.productName)
     ),
-    byCategory: [...byCategoryMap.values()].sort((a, b) =>
-      a.category.localeCompare(b.category)
+    byCompany: [...byCompanyMap.values()].sort((a, b) =>
+      a.company.localeCompare(b.company)
     ),
     byDate: [...byDateMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
   };

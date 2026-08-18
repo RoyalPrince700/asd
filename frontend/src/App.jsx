@@ -5,8 +5,14 @@ import { Layout } from "./components/Layout.jsx";
 import { Login } from "./pages/Login.jsx";
 import { Signup } from "./pages/Signup.jsx";
 import { ClerkHome } from "./pages/ClerkHome.jsx";
+import { StaffOverview } from "./pages/StaffOverview.jsx";
+import { StaffStockList } from "./pages/StaffStockList.jsx";
+import { AssignedStaffRoute } from "./components/AssignedStaffRoute.jsx";
 import { CfoHome } from "./pages/CfoHome.jsx";
+import { CfoLedger } from "./pages/CfoLedger.jsx";
 import { CfoProducts } from "./pages/CfoProducts.jsx";
+import { CfoStaff } from "./pages/CfoStaff.jsx";
+import { CfoAnalysis } from "./pages/CfoAnalysis.jsx";
 import { AdminHome } from "./pages/AdminHome.jsx";
 import { homeForRole } from "./utils/role.js";
 
@@ -38,6 +44,26 @@ export default function App() {
             }
           />
           <Route
+            path="/staff/overview"
+            element={
+              <ProtectedRoute role="clerk">
+                <AssignedStaffRoute>
+                  <StaffOverview />
+                </AssignedStaffRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/staff/inventory"
+            element={
+              <ProtectedRoute role="clerk">
+                <AssignedStaffRoute>
+                  <StaffStockList />
+                </AssignedStaffRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/overview"
             element={
               <ProtectedRoute role="cfo">
@@ -46,10 +72,34 @@ export default function App() {
             }
           />
           <Route
+            path="/ledger"
+            element={
+              <ProtectedRoute role="cfo">
+                <CfoLedger />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/products"
             element={
               <ProtectedRoute role="cfo">
                 <CfoProducts />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analysis"
+            element={
+              <ProtectedRoute role="cfo">
+                <CfoAnalysis />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/staff"
+            element={
+              <ProtectedRoute role="cfo">
+                <CfoStaff />
               </ProtectedRoute>
             }
           />

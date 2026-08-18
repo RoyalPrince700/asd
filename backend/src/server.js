@@ -11,7 +11,9 @@ const userRoutes = require("./routes/users");
 const recordRoutes = require("./routes/records");
 const productRoutes = require("./routes/products");
 const categoryRoutes = require("./routes/categories");
+const staffRoutes = require("./routes/staff");
 const reportRoutes = require("./routes/reports");
+const analysisRoutes = require("./routes/analysis");
 const { bootstrapAdmin, bootstrapProducts } = require("./utils/seed");
 
 const app = express();
@@ -34,7 +36,9 @@ app.use("/api/users", userRoutes);
 app.use("/api/records", recordRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/staff", staffRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/analysis", analysisRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

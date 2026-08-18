@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useDialog } from "../context/DialogContext.jsx";
 import { api } from "../api";
 import { roleLabel } from "../utils/role.js";
 
@@ -7,6 +8,7 @@ const ROLES = ["clerk", "cfo", "admin"];
 
 export function AdminHome() {
   const { user } = useAuth();
+  const { confirm, toast } = useDialog();
   const [users, setUsers] = useState([]);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
@@ -39,13 +41,20 @@ export function AdminHome() {
   }
 
   async function removeUser(id) {
-    if (!window.confirm("Delete this user? This cannot be undone.")) return;
+    const ok = await confirm({
+      title: "Delete user",
+      message: "Delete this user? This cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
 
     setBusyId(id);
     setError("");
     try {
       await api.deleteUser(id);
       setUsers((list) => list.filter((item) => item.id !== id));
+      toast({ message: "User deleted.", type: "success" });
     } catch (err) {
       setError(err.message);
     } finally {

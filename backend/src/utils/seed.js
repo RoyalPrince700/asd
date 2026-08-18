@@ -8,16 +8,11 @@ const mongoose = require("mongoose");
 const User = require("../models/User");
 const StockRecord = require("../models/StockRecord");
 const Product = require("../models/Product");
+const { COMPANIES } = require("../constants/companies");
 const { computeClosingBalance } = require("./stock");
 const { connectDb } = require("../config/db");
 
-const products = [
-  "Office Paper A4",
-  "Laptop Dell Latitude",
-  "Printer Toner",
-  "Packaging Cartons",
-  "Safety Helmets",
-];
+const products = [];
 
 function daysAgo(n) {
   const d = new Date();
@@ -86,6 +81,10 @@ async function seedDatabase({ reset = false } = {}) {
 
   await Product.insertMany(products.map((name) => ({ name })));
 
+  if (!products.length) {
+    return { seeded: true, records: 0 };
+  }
+
   const rows = [];
   const openings = Object.fromEntries(products.map((name) => [name, 0]));
 
@@ -152,7 +151,9 @@ async function bootstrapProducts() {
     return { bootstrapped: false, count: 0 };
   }
 
-  await Product.insertMany(names.map((name) => ({ name })));
+  await Product.insertMany(
+    names.map((name) => ({ name, company: COMPANIES.ACCESSIBLE }))
+  );
   return { bootstrapped: true, count: names.length };
 }
 

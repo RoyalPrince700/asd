@@ -2,12 +2,26 @@ const express = require("express");
 const multer = require("multer");
 const ExcelJS = require("exceljs");
 const Product = require("../models/Product");
+const CatalogConfig = require("../models/CatalogConfig");
 const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const {
-  parseProductNamesExcel,
+  COMPANIES,
+  COMPANY_LABELS,
+  ACCESSIBLE_LOCATIONS,
+  TRIFONE_AUGUST_FIELDS,
+  emptyAccessibleStock,
+  emptyTrifoneData,
+} = require("../constants/companies");
+const {
+  parseAccessibleInventoryExcel,
+  parseTrifoneInventoryExcel,
   getCurrentStock,
   buildStockSnapshot,
+  buildMovementMap,
+  liveAccessibleStock,
+  liveLocationBalance,
+  liveTrifoneBalance,
 } = require("../utils/inventory");
 
 const router = express.Router();
@@ -27,21 +41,164 @@ const upload = multer({
 
 router.use(protect);
 
-function formatProduct(row) {
+function resolveCompany(value) {
+  const company = String(value || COMPANIES.ACCESSIBLE).trim().toLowerCase();
+  if (!Object.values(COMPANIES).includes(company)) {
+    return null;
+  }
+  return company;
+}
+
+async function getHiddenColumns(company) {
+  const config = await CatalogConfig.findOne({ company }).select("hiddenColumns");
+  return config?.hiddenColumns || [];
+}
+
+function visibleAccessibleLocations(hiddenColumns = []) {
+  return ACCESSIBLE_LOCATIONS.filter((loc) => !hiddenColumns.includes(loc));
+}
+
+function visibleTrifoneFields(hiddenColumns = []) {
+  return TRIFONE_AUGUST_FIELDS.filter((field) => !hiddenColumns.includes(field.key));
+}
+
+function formatAccessibleProduct(row, visibleLocations = ACCESSIBLE_LOCATIONS) {
+  const stock = row.stock?.toObject?.() || row.stock || emptyAccessibleStock();
+  const allTotal = visibleLocations.reduce(
+    (sum, loc) => sum + (Number(stock[loc]) || 0),
+    0
+  );
+
   return {
     _id: row._id,
     name: row.name,
+    company: row.company,
+    stock,
+    allTotal,
   };
 }
 
+function formatTrifoneProduct(row) {
+  const trifoneData =
+    row.trifoneData?.toObject?.() || row.trifoneData || emptyTrifoneData();
+
+  return {
+    _id: row._id,
+    name: row.name,
+    company: row.company,
+    trifoneData,
+  };
+}
+
+function formatProduct(row, { live = false, movementMap = null, visibleLocations = ACCESSIBLE_LOCATIONS } = {}) {
+  if (row.company === COMPANIES.TRIFONE) {
+    const product = formatTrifoneProduct(row);
+    if (live && movementMap) {
+      product.trifoneData = {
+        ...product.trifoneData,
+        currentStock: liveTrifoneBalance(row, movementMap),
+      };
+      product.live = true;
+    }
+    return product;
+  }
+
+  const product = formatAccessibleProduct(row, visibleLocations);
+  if (live && movementMap) {
+    const { stock, allTotal } = liveAccessibleStock(row, movementMap);
+    product.stock = stock;
+    product.allTotal = visibleLocations.reduce(
+      (sum, loc) => sum + (Number(stock[loc]) || 0),
+      0
+    );
+    product.live = true;
+  }
+  return product;
+}
+
+function resolveStaffAssignment(user) {
+  if (user.assignedCompany === COMPANIES.TRIFONE) {
+    return { company: COMPANIES.TRIFONE, location: null };
+  }
+  if (user.location) {
+    return { company: COMPANIES.ACCESSIBLE, location: user.location };
+  }
+  return null;
+}
+
+router.get("/my-inventory", requireRole("clerk"), asyncHandler(async (req, res) => {
+  const assignment = resolveStaffAssignment(req.user);
+  if (!assignment) {
+    return res.status(403).json({
+      message: "You have not been assigned yet. Contact CFO.",
+    });
+  }
+
+  const search = String(req.query.search || "").trim();
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+  const { company, location } = assignment;
+
+  const filter = { company };
+  if (search) {
+    filter.name = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  }
+
+  const total = await Product.countDocuments(filter);
+  const rows = await Product.find(filter)
+    .sort({ name: 1 })
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .select("name company stock trifoneData");
+
+  const movementMap = await buildMovementMap(company, location);
+
+  const products = rows.map((row) => {
+    if (company === COMPANIES.TRIFONE) {
+      const trifoneData = row.trifoneData?.toObject?.() || row.trifoneData || emptyTrifoneData();
+      return {
+        _id: row._id,
+        name: row.name,
+        company: row.company,
+        openingBalance: Number(trifoneData.currentStock) || 0,
+        balance: liveTrifoneBalance(row, movementMap),
+      };
+    }
+
+    const stockObj = row.stock?.toObject?.() || row.stock || emptyAccessibleStock();
+    return {
+      _id: row._id,
+      name: row.name,
+      company: row.company,
+      location,
+      openingBalance: Number(stockObj[location]) || 0,
+      balance: liveLocationBalance(row, location, movementMap),
+    };
+  });
+
+  res.json({
+    products,
+    total,
+    page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+    company,
+    location,
+  });
+}));
+
 router.get("/", asyncHandler(async (req, res) => {
   const search = String(req.query.search || "").trim();
+  const company = resolveCompany(req.query.company);
   const page = Number(req.query.page);
   const limit = Number(req.query.limit);
+  const live = String(req.query.live || "") === "1" || req.query.live === "true";
 
-  const filter = search
-    ? { name: new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") }
-    : {};
+  const filter = {};
+  if (company) filter.company = company;
+  if (search) {
+    filter.name = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  }
 
   if (page > 0 && limit > 0) {
     const safeLimit = Math.min(100, Math.max(1, limit));
@@ -51,20 +208,40 @@ router.get("/", asyncHandler(async (req, res) => {
       .sort({ name: 1 })
       .skip((safePage - 1) * safeLimit)
       .limit(safeLimit)
-      .select("name");
+      .select("name company stock trifoneData");
+
+    let movementMap = null;
+    if (live && company) {
+      movementMap = await buildMovementMap(company);
+    }
+
+    const hiddenColumns = company ? await getHiddenColumns(company) : [];
+    const locations =
+      company === COMPANIES.TRIFONE ? [] : visibleAccessibleLocations(hiddenColumns);
+    const trifoneFields =
+      company === COMPANIES.TRIFONE ? visibleTrifoneFields(hiddenColumns) : [];
 
     return res.json({
-      products: rows.map(formatProduct),
+      products: rows.map((row) =>
+        formatProduct(row, { live, movementMap, visibleLocations: locations.length ? locations : ACCESSIBLE_LOCATIONS })
+      ),
       total,
       page: safePage,
       limit: safeLimit,
       totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+      company: company || null,
+      live,
+      locations,
+      trifoneFields,
+      hiddenColumns,
     });
   }
 
-  const products = await Product.find(filter).sort({ name: 1 }).select("name");
+  const products = await Product.find(filter)
+    .sort({ name: 1 })
+    .select("name company");
   res.json({
-    products: products.map((p) => p.name),
+    products: products.map((p) => ({ name: p.name, company: p.company })),
   });
 }));
 
@@ -74,27 +251,123 @@ router.get("/stock", requireRole("cfo"), asyncHandler(async (_req, res) => {
 
 router.get("/stock-level", asyncHandler(async (req, res) => {
   const productName = String(req.query.productName || "").trim();
-  const category = String(req.query.category || "").trim();
+  const company = String(req.query.company || "").trim().toLowerCase();
   const excludeRecordId = req.query.excludeRecordId || null;
+  const location = req.query.location
+    ? String(req.query.location).trim().toUpperCase()
+    : req.user?.location || null;
 
-  if (!productName || !category) {
-    return res.status(400).json({ message: "Product and category are required." });
+  if (!productName || !company) {
+    return res.status(400).json({ message: "Product and company are required." });
+  }
+
+  if (location && !ACCESSIBLE_LOCATIONS.includes(location)) {
+    return res.status(400).json({ message: "Invalid location." });
   }
 
   const openingBalance = await getCurrentStock(
     productName,
-    category,
-    excludeRecordId
+    company,
+    excludeRecordId,
+    location
   );
   res.json({ openingBalance });
 }));
 
-router.get("/template", requireRole("cfo"), asyncHandler(async (_req, res) => {
+router.get("/template", requireRole("cfo"), asyncHandler(async (req, res) => {
+  const company = resolveCompany(req.query.company);
+  if (!company) {
+    return res.status(400).json({ message: "Invalid company." });
+  }
+
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("Products");
-  sheet.columns = [{ header: "Item Name", key: "name", width: 40 }];
-  sheet.addRow({ name: "30 MINUTES ON THE ASSEMBLY" });
-  sheet.addRow({ name: "A JOLLY RIDE TO GRANDPA" });
+  const label = COMPANY_LABELS[company].replace(/\s+/g, "-").toLowerCase();
+
+  if (company === COMPANIES.TRIFONE) {
+    const sheet = workbook.addWorksheet("Stock Register");
+    sheet.columns = [
+      { header: "ITEM NAME", key: "name", width: 24 },
+      ...TRIFONE_AUGUST_FIELDS.map((field) => ({
+        header: field.label,
+        key: field.key,
+        width: field.type === "text" ? 18 : 16,
+      })),
+    ];
+    sheet.addRow({
+      name: "X801 MAX",
+      openingStock2Aug: 5,
+      openingStock9Aug: 5,
+      openingStock16Aug: 5,
+      restock2Aug: 0,
+      currentStock: 5,
+      unitsInMaint: 3,
+      unitsInMaint3Aug: 3,
+      totalMaint: 3,
+      returns: 0,
+      maintenanceValue: 165000,
+      returnValue: 0,
+      unitsSold: 1150,
+      costPrice: 45000,
+      unitPrice: 55000,
+      salesRevenue: 63250000,
+      stockValueOnHand: 275000,
+      remarks: "",
+    });
+    sheet.addRow({
+      name: "Q72",
+      openingStock2Aug: 0,
+      openingStock9Aug: 0,
+      openingStock16Aug: 0,
+      restock2Aug: 0,
+      currentStock: 0,
+      unitsInMaint: 0,
+      unitsInMaint3Aug: 0,
+      totalMaint: 0,
+      returns: 0,
+      maintenanceValue: 0,
+      returnValue: 0,
+      unitsSold: 0,
+      costPrice: 0,
+      unitPrice: 0,
+      salesRevenue: 0,
+      stockValueOnHand: 0,
+      remarks: "Out of Stock",
+    });
+  } else {
+    const sheet = workbook.addWorksheet("Inventory");
+    sheet.columns = [
+      { header: "BookName", key: "name", width: 42 },
+      ...ACCESSIBLE_LOCATIONS.map((loc) => ({
+        header: loc,
+        key: loc,
+        width: 10,
+      })),
+    ];
+    sheet.addRow({
+      name: "30 MINUTES ON THE ASSEMBLY",
+      HO: 319,
+      AK: 54,
+      AB: 183,
+      ED: 52,
+      LA: 81,
+      KA: 31,
+      US: 102,
+      AN: 33,
+      ANX: 32,
+    });
+    sheet.addRow({
+      name: "A JOLLY RIDE TO GRANDPA",
+      HO: 0,
+      AK: 12,
+      AB: 0,
+      ED: 8,
+      LA: 0,
+      KA: 0,
+      US: 0,
+      AN: 0,
+      ANX: 0,
+    });
+  }
 
   res.setHeader(
     "Content-Type",
@@ -102,7 +375,7 @@ router.get("/template", requireRole("cfo"), asyncHandler(async (_req, res) => {
   );
   res.setHeader(
     "Content-Disposition",
-    'attachment; filename="product-list-template.xlsx"'
+    `attachment; filename="${label}-catalog-template.xlsx"`
   );
   await workbook.xlsx.write(res);
   res.end();
@@ -115,40 +388,158 @@ router.post(
   asyncHandler(async (req, res) => {
     if (!req.file) {
       return res.status(400).json({
-        message: "Upload an Excel file (.xlsx) with product names in the first column.",
+        message: "Upload an Excel file (.xlsx) for the selected company catalog.",
       });
     }
 
-    const names = await parseProductNamesExcel(req.file.buffer);
+    const company = resolveCompany(req.body.company || req.query.company);
+    if (!company) {
+      return res.status(400).json({ message: "Invalid company." });
+    }
 
-    if (!names.length) {
+    let rows = [];
+    if (company === COMPANIES.TRIFONE) {
+      rows = await parseTrifoneInventoryExcel(req.file.buffer);
+    } else {
+      rows = await parseAccessibleInventoryExcel(req.file.buffer);
+    }
+
+    if (!rows.length) {
       return res.status(400).json({
-        message: "No product names found. Use a column headed Item Name, BookName, or Product Name.",
+        message:
+          company === COMPANIES.TRIFONE
+            ? "No Trifone products found. Use the stock register with ITEM NAME and August columns."
+            : "No products found. Use BookName plus location columns HO, AK, AB, ED, LA, KA, US, AN, ANX.",
       });
     }
 
-    const result = await Product.bulkWrite(
-      names.map((name) => ({
-        updateOne: {
-          filter: { name },
-          update: {
-            $setOnInsert: { name, uploadedBy: req.user._id },
-          },
-          upsert: true,
-        },
-      }))
+    await Product.deleteMany({ company });
+    await CatalogConfig.findOneAndUpdate(
+      { company },
+      { hiddenColumns: [] },
+      { upsert: true }
     );
 
-    const added = result.upsertedCount;
-    const skipped = names.length - added;
-    const total = await Product.countDocuments();
+    if (company === COMPANIES.TRIFONE) {
+      await Product.insertMany(
+        rows.map((row) => ({
+          name: row.name,
+          company,
+          trifoneData: row.trifoneData,
+          uploadedBy: req.user._id,
+        }))
+      );
+    } else {
+      await Product.insertMany(
+        rows.map((row) => ({
+          name: row.name,
+          company,
+          stock: row.stock,
+          uploadedBy: req.user._id,
+        }))
+      );
+    }
+
+    const total = await Product.countDocuments({ company });
+    const label = COMPANY_LABELS[company];
 
     res.json({
-      message: `${added} new product(s) added. ${skipped} already in catalog. ${total} total products.`,
-      added,
-      skipped,
+      message: `${rows.length} product(s) imported for ${label}. Previous ${label} catalog entries were replaced.`,
+      imported: rows.length,
       total,
       count: total,
+      company,
+    });
+  })
+);
+
+router.delete(
+  "/column/:key",
+  requireRole("cfo"),
+  asyncHandler(async (req, res) => {
+    const company = resolveCompany(req.query.company);
+    const columnKey = String(req.params.key || "").trim();
+
+    if (!company) {
+      return res.status(400).json({ message: "Invalid company." });
+    }
+
+    const hiddenColumns = await getHiddenColumns(company);
+
+    if (company === COMPANIES.TRIFONE) {
+      const field = TRIFONE_AUGUST_FIELDS.find((item) => item.key === columnKey);
+      if (!field) {
+        return res.status(400).json({ message: "Invalid column." });
+      }
+      if (hiddenColumns.includes(columnKey)) {
+        return res.status(400).json({ message: "Column is already removed." });
+      }
+      const remaining = visibleTrifoneFields(hiddenColumns);
+      if (remaining.length <= 1) {
+        return res.status(400).json({ message: "At least one data column must remain." });
+      }
+
+      await CatalogConfig.findOneAndUpdate(
+        { company },
+        { $addToSet: { hiddenColumns: columnKey } },
+        { upsert: true, new: true }
+      );
+      await Product.updateMany(
+        { company },
+        { $unset: { [`trifoneData.${columnKey}`]: "" } }
+      );
+
+      return res.json({
+        message: `Column "${field.label}" removed from the Trifone catalog.`,
+        column: columnKey,
+        company,
+      });
+    }
+
+    const location = columnKey.toUpperCase();
+    if (!ACCESSIBLE_LOCATIONS.includes(location)) {
+      return res.status(400).json({ message: "Invalid column." });
+    }
+    if (hiddenColumns.includes(location)) {
+      return res.status(400).json({ message: "Column is already removed." });
+    }
+    const remaining = visibleAccessibleLocations(hiddenColumns);
+    if (remaining.length <= 1) {
+      return res.status(400).json({ message: "At least one location column must remain." });
+    }
+
+    await CatalogConfig.findOneAndUpdate(
+      { company },
+      { $addToSet: { hiddenColumns: location } },
+      { upsert: true, new: true }
+    );
+    await Product.updateMany(
+      { company },
+      { $unset: { [`stock.${location}`]: "" } }
+    );
+
+    res.json({
+      message: `Column "${location}" removed from the APL catalog.`,
+      column: location,
+      company,
+    });
+  })
+);
+
+router.delete(
+  "/:id",
+  requireRole("cfo"),
+  asyncHandler(async (req, res) => {
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found." });
+    }
+
+    await product.deleteOne();
+
+    res.json({
+      message: `"${product.name}" removed from the catalog.`,
+      id: product._id,
     });
   })
 );

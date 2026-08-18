@@ -16,6 +16,7 @@ const StockRecord = require("../models/StockRecord");
 const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const { summarizeRecords } = require("../utils/stock");
+const { companyLabel } = require("../constants/companies");
 
 const router = express.Router();
 
@@ -28,6 +29,10 @@ function buildFilter(query) {
     filter.productName = new RegExp(String(query.productName).trim(), "i");
   }
 
+  if (query.company) {
+    filter.company = String(query.company).trim().toLowerCase();
+  }
+
   if (query.from || query.to) {
     filter.date = {};
     if (query.from) filter.date.$gte = new Date(query.from);
@@ -36,6 +41,10 @@ function buildFilter(query) {
       to.setHours(23, 59, 59, 999);
       filter.date.$lte = to;
     }
+  }
+
+  if (query.location) {
+    filter.location = String(query.location).trim().toUpperCase();
   }
 
   return filter;
@@ -71,6 +80,7 @@ router.get("/excel", asyncHandler(async (req, res) => {
   const sheet = workbook.addWorksheet("Stock Movement");
   sheet.columns = [
     { header: "Date", key: "date", width: 14 },
+    { header: "Company", key: "company", width: 14 },
     { header: "Product", key: "productName", width: 28 },
     { header: "Opening Balance", key: "openingBalance", width: 18 },
     { header: "In", key: "inbound", width: 12 },
@@ -91,6 +101,7 @@ router.get("/excel", asyncHandler(async (req, res) => {
   for (const row of records) {
     sheet.addRow({
       date: formatDate(row.date),
+      company: companyLabel(row.company, { short: true }),
       productName: row.productName,
       openingBalance: row.openingBalance,
       inbound: row.inbound,
@@ -175,6 +186,7 @@ router.get("/docx", asyncHandler(async (req, res) => {
   const header = new TableRow({
     children: [
       "Date",
+      "Company",
       "Product",
       "Opening",
       "In",
@@ -192,6 +204,7 @@ router.get("/docx", asyncHandler(async (req, res) => {
       new TableRow({
         children: [
           cell(formatDate(row.date)),
+          cell(companyLabel(row.company, { short: true })),
           cell(row.productName),
           cell(formatNumber(row.openingBalance), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.inbound), { align: AlignmentType.RIGHT }),
@@ -274,6 +287,153 @@ router.get("/docx", asyncHandler(async (req, res) => {
   res.setHeader(
     "Content-Disposition",
     `attachment; filename="cfo-stock-report-${stamp()}.docx"`
+  );
+  res.send(buffer);
+}));
+
+router.get("/ledger/excel", asyncHandler(async (req, res) => {
+  const { records, summary } = await loadReportData(req.query);
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Accessible Stock Dashboard";
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet("Ledger Lines");
+  sheet.columns = [
+    { header: "Date", key: "date", width: 14 },
+    { header: "Company", key: "company", width: 14 },
+    { header: "Location", key: "location", width: 12 },
+    { header: "Product", key: "productName", width: 28 },
+    { header: "Opening", key: "openingBalance", width: 14 },
+    { header: "In", key: "inbound", width: 12 },
+    { header: "Out", key: "outbound", width: 12 },
+    { header: "Closing", key: "closingBalance", width: 14 },
+    { header: "Clerk", key: "enteredBy", width: 22 },
+  ];
+
+  sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  sheet.getRow(1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF132337" },
+  };
+
+  for (const row of records) {
+    sheet.addRow({
+      date: formatDate(row.date),
+      company: companyLabel(row.company, { short: true }),
+      location: row.location || "",
+      productName: row.productName,
+      openingBalance: row.openingBalance,
+      inbound: row.inbound,
+      outbound: row.outbound,
+      closingBalance: row.closingBalance,
+      enteredBy: row.enteredBy?.name || "",
+    });
+  }
+
+  const totalsRow = sheet.addRow({
+    date: "",
+    productName: "TOTALS",
+    openingBalance: summary.totals.openingBalance,
+    inbound: summary.totals.inbound,
+    outbound: summary.totals.outbound,
+    closingBalance: summary.totals.closingBalance,
+    enteredBy: `${summary.totals.recordCount} records`,
+  });
+  totalsRow.font = { bold: true };
+
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="cfo-ledger-lines-${stamp()}.xlsx"`
+  );
+  await workbook.xlsx.write(res);
+  res.end();
+}));
+
+router.get("/ledger/docx", asyncHandler(async (req, res) => {
+  const { records, summary } = await loadReportData(req.query);
+  const t = summary.totals;
+
+  const header = new TableRow({
+    children: [
+      "Date",
+      "Company",
+      "Location",
+      "Product",
+      "Opening",
+      "In",
+      "Out",
+      "Closing",
+      "Clerk",
+    ].map((label) =>
+      cell(label, { bold: true, color: "FFFFFF", shading: "132337", width: 1200 })
+    ),
+  });
+
+  const bodyRows = records.map(
+    (row) =>
+      new TableRow({
+        children: [
+          cell(formatDate(row.date)),
+          cell(companyLabel(row.company, { short: true })),
+          cell(row.location || "—"),
+          cell(row.productName),
+          cell(formatNumber(row.openingBalance), { align: AlignmentType.RIGHT }),
+          cell(formatNumber(row.inbound), { align: AlignmentType.RIGHT }),
+          cell(formatNumber(row.outbound), { align: AlignmentType.RIGHT }),
+          cell(formatNumber(row.closingBalance), { align: AlignmentType.RIGHT }),
+          cell(row.enteredBy?.name || "—"),
+        ],
+      })
+  );
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            children: [
+              new TextRun({
+                text: "Ledger Lines Report",
+                font: "Calibri",
+                bold: true,
+              }),
+            ],
+          }),
+          new Paragraph({
+            spacing: { after: 200 },
+            children: [
+              new TextRun({
+                text: `Generated ${new Date().toLocaleString()} · ${t.recordCount} records · Opening ${formatNumber(t.openingBalance)} · In ${formatNumber(t.inbound)} · Out ${formatNumber(t.outbound)} · Closing ${formatNumber(t.closingBalance)}`,
+                italics: true,
+                size: 20,
+                color: "57534E",
+              }),
+            ],
+          }),
+          new Table({
+            width: { size: 10080, type: WidthType.DXA },
+            rows: [header, ...bodyRows],
+          }),
+        ],
+      },
+    ],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  );
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="cfo-ledger-lines-${stamp()}.docx"`
   );
   res.send(buffer);
 }));

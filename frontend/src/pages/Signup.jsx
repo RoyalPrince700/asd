@@ -35,8 +35,8 @@ export function Signup() {
         <p className="eyebrow">Accessible Stock Dashboard</p>
         <h1>Create your account.</h1>
         <p className="lede">
-          Sign up with your work email. An administrator can assign you a CFO
-          or admin role later.
+          Sign up with your work email. CFO will assign you to a company or
+          location before you can access the dashboard.
         </p>
 
         <form onSubmit={onSubmit} className="login-form">
@@ -93,13 +93,13 @@ export function Signup() {
       </section>
       <aside className="login-aside">
         <blockquote>
-          New accounts start as data clerks and can post daily stock movement
-          once signed in.
+          New accounts start as data clerks. You will see a waiting page until a
+          CFO assigns you to Trifone or an APL location.
         </blockquote>
         <ul>
           <li>Work email and password</li>
           <li>Clerk access by default</li>
-          <li>Role changes by an administrator</li>
+          <li>Dashboard unlocks after CFO assignment</li>
         </ul>
       </aside>
     </div>

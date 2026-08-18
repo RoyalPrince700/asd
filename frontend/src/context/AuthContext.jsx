@@ -30,6 +30,12 @@ export function AuthProvider({ children }) {
     () => ({
       user,
       ready,
+      async refreshUser() {
+        if (!getToken()) return null;
+        const data = await api.me();
+        setUser(data.user);
+        return data.user;
+      },
       async login(email, password) {
         const data = await api.login(email, password);
         setToken(data.token);

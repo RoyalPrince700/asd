@@ -1,6 +1,15 @@
 const ExcelJS = require("exceljs");
 const StockRecord = require("../models/StockRecord");
 const Product = require("../models/Product");
+const {
+  COMPANIES,
+  ACCESSIBLE_LOCATIONS,
+  SKIP_HEADERS,
+  TRIFONE_HEADER_PATTERNS,
+  TRIFONE_FIELD_LOOKUP,
+  emptyAccessibleStock,
+  emptyTrifoneData,
+} = require("../constants/companies");
 
 const NAME_HEADERS = [
   /^item\s*name$/i,
@@ -8,6 +17,10 @@ const NAME_HEADERS = [
   /^product(\s*name)?$/i,
   /^name$/i,
 ];
+
+const LOCATION_LOOKUP = Object.fromEntries(
+  ACCESSIBLE_LOCATIONS.map((loc) => [loc.toUpperCase(), loc])
+);
 
 function cellText(value) {
   if (value == null) return "";
@@ -66,8 +79,285 @@ async function parseProductNamesExcel(buffer) {
   return [...new Set(names)];
 }
 
-async function getCurrentStock(productName, category, excludeRecordId = null) {
-  const match = { productName, category };
+function parseCount(value) {
+  const text = cellText(value);
+  if (!text || text === "-") return 0;
+  const n = Number(text.replace(/,/g, ""));
+  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+}
+
+function isLocationHeader(text) {
+  return Boolean(LOCATION_LOOKUP[String(text).trim().toUpperCase()]);
+}
+
+function normalizeLocationHeader(text) {
+  return LOCATION_LOOKUP[String(text).trim().toUpperCase()] || null;
+}
+
+async function parseAccessibleInventoryExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) {
+    throw new Error("The Excel file has no worksheets.");
+  }
+
+  const headerRow = sheet.getRow(1);
+  const headers = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber] = cellText(cell.value);
+  });
+
+  const nameCol = findNameColumn(headers);
+  if (!nameCol) {
+    throw new Error("No BookName column found. Use a column headed BookName or Item Name.");
+  }
+
+  const locationCols = [];
+  headers.forEach((header, colNumber) => {
+    if (!header || colNumber === nameCol) return;
+    if (SKIP_HEADERS.test(header)) return;
+    const location = normalizeLocationHeader(header);
+    if (location) {
+      locationCols.push({ colNumber, location });
+    }
+  });
+
+  if (!locationCols.length) {
+    throw new Error(
+      "No location columns found. Expected headers: HO, AK, AB, ED, LA, KA, US, AN, ANX."
+    );
+  }
+
+  const rows = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+
+    const name = cellText(row.getCell(nameCol).value);
+    if (!name) return;
+
+    const stock = emptyAccessibleStock();
+    for (const { colNumber, location } of locationCols) {
+      stock[location] = parseCount(row.getCell(colNumber).value);
+    }
+
+    rows.push({ name, stock });
+  });
+
+  return rows;
+}
+
+function normalizeHeader(text) {
+  return cellText(text)
+    .replace(/[₦#]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function headerMonth(header) {
+  const match = header.match(/\(\s*(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{2,4})\s*\)/);
+  if (!match) return null;
+  return parseInt(match[2], 10);
+}
+
+function shouldSkipTrifoneHeader(header) {
+  const month = headerMonth(header);
+  if (month == null) return false;
+  return month !== 8;
+}
+
+function matchTrifoneField(header) {
+  const normalized = normalizeHeader(header);
+  if (!normalized || shouldSkipTrifoneHeader(normalized)) return null;
+
+  for (const { key, patterns } of TRIFONE_HEADER_PATTERNS) {
+    if (patterns.some((pattern) => pattern.test(normalized))) {
+      return key;
+    }
+  }
+  return null;
+}
+
+function findTrifoneHeaderRow(sheet) {
+  for (let rowNumber = 1; rowNumber <= 20; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    let hasItemName = false;
+    row.eachCell({ includeEmpty: false }, (cell) => {
+      if (/item\s*name/i.test(normalizeHeader(cell.value))) {
+        hasItemName = true;
+      }
+    });
+    if (hasItemName) return rowNumber;
+  }
+  return null;
+}
+
+function parseMoney(value) {
+  const text = cellText(value).replace(/[₦#,]/g, "").trim();
+  if (!text || text === "-") return 0;
+  const n = Number(text);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+function parseTrifoneValue(value, fieldKey) {
+  if (fieldKey === "remarks") return cellText(value);
+  const field = TRIFONE_FIELD_LOOKUP[fieldKey];
+  if (field?.type === "money") return parseMoney(value);
+  return parseCount(value);
+}
+
+function isTrifoneDataRow(name) {
+  const text = cellText(name);
+  if (!text) return false;
+  if (/^total$/i.test(text)) return false;
+  if (/key\s*performance/i.test(text)) return false;
+  if (/^reporting\s*period$/i.test(text)) return false;
+  return true;
+}
+
+async function parseTrifoneInventoryExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) {
+    throw new Error("The Excel file has no worksheets.");
+  }
+
+  const headerRowNumber = findTrifoneHeaderRow(sheet);
+  if (!headerRowNumber) {
+    throw new Error('No "ITEM NAME" header row found in the Trifone register.');
+  }
+
+  const headerRow = sheet.getRow(headerRowNumber);
+  const headers = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber] = normalizeHeader(cell.value);
+  });
+
+  const nameCol = headers.findIndex(
+    (header) => header && /^item\s*name$/i.test(header)
+  );
+  if (nameCol < 1) {
+    throw new Error('No "ITEM NAME" column found.');
+  }
+
+  const fieldCols = [];
+  headers.forEach((header, colNumber) => {
+    if (!header || colNumber === nameCol) return;
+    const fieldKey = matchTrifoneField(header);
+    if (fieldKey) {
+      fieldCols.push({ colNumber, fieldKey });
+    }
+  });
+
+  if (!fieldCols.length) {
+    throw new Error(
+      "No August columns found. Expected August dated columns and current stock fields."
+    );
+  }
+
+  const rows = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= headerRowNumber) return;
+
+    const name = cellText(row.getCell(nameCol).value);
+    if (!isTrifoneDataRow(name)) return;
+
+    const trifoneData = emptyTrifoneData();
+    for (const { colNumber, fieldKey } of fieldCols) {
+      trifoneData[fieldKey] = parseTrifoneValue(
+        row.getCell(colNumber).value,
+        fieldKey
+      );
+    }
+
+    rows.push({ name, trifoneData });
+  });
+
+  return rows;
+}
+
+async function buildMovementMap(company, location = null) {
+  const match = { company };
+  if (location) {
+    match.location = location;
+  } else if (company === COMPANIES.TRIFONE) {
+    match.$or = [{ location: null }, { location: { $exists: false } }];
+  }
+
+  const groupId = location
+    ? "$productName"
+    : { productName: "$productName", location: "$location" };
+
+  const rows = await StockRecord.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: groupId,
+        net: {
+          $sum: {
+            $subtract: [
+              { $add: ["$inbound", "$stockReceived"] },
+              { $add: ["$outbound", "$stockOut"] },
+            ],
+          },
+        },
+      },
+    },
+  ]);
+
+  const map = new Map();
+  for (const row of rows) {
+    if (location) {
+      map.set(row._id, row.net);
+    } else if (company === COMPANIES.TRIFONE) {
+      map.set(row._id, row.net);
+    } else {
+      const loc = row._id.location || "";
+      map.set(`${row._id.productName}:${loc}`, row.net);
+    }
+  }
+  return map;
+}
+
+function liveAccessibleStock(product, movementMap) {
+  const stockObj = product.stock?.toObject?.() || product.stock || emptyAccessibleStock();
+  const liveStock = {};
+  let allTotal = 0;
+
+  for (const loc of ACCESSIBLE_LOCATIONS) {
+    const base = Number(stockObj[loc]) || 0;
+    const net = movementMap.get(`${product.name}:${loc}`) || 0;
+    liveStock[loc] = Math.max(0, base + net);
+    allTotal += liveStock[loc];
+  }
+
+  return { stock: liveStock, allTotal };
+}
+
+function liveLocationBalance(product, location, movementMap) {
+  const stockObj = product.stock?.toObject?.() || product.stock || emptyAccessibleStock();
+  const base = Number(stockObj[location]) || 0;
+  const net = movementMap.get(product.name) || 0;
+  return Math.max(0, base + net);
+}
+
+function liveTrifoneBalance(product, movementMap) {
+  const trifoneObj = product.trifoneData?.toObject?.() || product.trifoneData || emptyTrifoneData();
+  const base = Number(trifoneObj.currentStock) || 0;
+  const net = movementMap.get(product.name) || 0;
+  return Math.max(0, base + net);
+}
+
+async function getCurrentStock(productName, company, excludeRecordId = null, location = null) {
+  const match = { productName, company };
+  if (location) {
+    match.location = location;
+  } else if (company === COMPANIES.TRIFONE) {
+    match.$or = [{ location: null }, { location: { $exists: false } }];
+  }
   if (excludeRecordId) {
     match._id = { $ne: excludeRecordId };
   }
@@ -89,7 +379,20 @@ async function getCurrentStock(productName, category, excludeRecordId = null) {
     },
   ]);
 
-  return Math.max(0, movement?.net || 0);
+  let baseStock = 0;
+  const product = await Product.findOne({ name: productName, company }).select(
+    "stock trifoneData"
+  );
+
+  if (location && product?.stock) {
+    const stockObj = product.stock.toObject?.() || product.stock;
+    baseStock = Number(stockObj[location]) || 0;
+  } else if (company === COMPANIES.TRIFONE && product?.trifoneData) {
+    const trifoneObj = product.trifoneData.toObject?.() || product.trifoneData;
+    baseStock = Number(trifoneObj.currentStock) || 0;
+  }
+
+  return Math.max(0, baseStock + (movement?.net || 0));
 }
 
 async function buildStockSnapshot() {
@@ -108,6 +411,12 @@ async function buildStockSnapshot() {
 
 module.exports = {
   parseProductNamesExcel,
+  parseAccessibleInventoryExcel,
+  parseTrifoneInventoryExcel,
   getCurrentStock,
   buildStockSnapshot,
+  buildMovementMap,
+  liveAccessibleStock,
+  liveLocationBalance,
+  liveTrifoneBalance,
 };

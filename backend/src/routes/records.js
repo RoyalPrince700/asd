@@ -8,8 +8,8 @@ const {
   summarizeRecords,
   computeClosingBalance,
 } = require("../utils/stock");
+const { COMPANIES, isValidCompany, ACCESSIBLE_LOCATIONS } = require("../constants/companies");
 const { isValidProductName } = require("../utils/products");
-const { isValidCategory } = require("../utils/categories");
 const { getCurrentStock } = require("../utils/inventory");
 
 const router = express.Router();
@@ -23,8 +23,8 @@ function buildFilter(query) {
     filter.productName = new RegExp(String(query.productName).trim(), "i");
   }
 
-  if (query.category) {
-    filter.category = String(query.category).trim();
+  if (query.company) {
+    filter.company = String(query.company).trim().toLowerCase();
   }
 
   if (query.from || query.to) {
@@ -37,6 +37,10 @@ function buildFilter(query) {
     }
   }
 
+  if (query.location) {
+    filter.location = String(query.location).trim().toUpperCase();
+  }
+
   return filter;
 }
 
@@ -45,6 +49,33 @@ router.get("/", asyncHandler(async (req, res) => {
 
   if (req.user.role === "clerk") {
     filter.enteredBy = req.user._id;
+    if (req.user.assignedCompany === COMPANIES.TRIFONE) {
+      filter.company = COMPANIES.TRIFONE;
+    } else if (req.user.location) {
+      filter.company = COMPANIES.ACCESSIBLE;
+      filter.location = req.user.location;
+    }
+  }
+
+  const page = parseInt(req.query.page, 10);
+  const limit = parseInt(req.query.limit, 10);
+
+  if (page > 0 && limit > 0) {
+    const total = await StockRecord.countDocuments(filter);
+    const records = await StockRecord.find(filter)
+      .populate("enteredBy", "name email role")
+      .sort({ date: -1, createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.json({
+      records,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+    return;
   }
 
   const records = await StockRecord.find(filter)
@@ -54,9 +85,28 @@ router.get("/", asyncHandler(async (req, res) => {
   res.json({ records });
 }));
 
-router.get("/products", asyncHandler(async (_req, res) => {
-  const products = await Product.find().sort({ name: 1 }).select("name");
-  res.json({ products: products.map((p) => p.name) });
+router.get("/products", asyncHandler(async (req, res) => {
+  const filter = {
+    company: { $in: [COMPANIES.ACCESSIBLE, COMPANIES.TRIFONE] },
+  };
+
+  if (req.query.company && isValidCompany(req.query.company)) {
+    filter.company = String(req.query.company).trim().toLowerCase();
+  } else if (req.user.role === "clerk") {
+    if (req.user.assignedCompany === COMPANIES.TRIFONE) {
+      filter.company = COMPANIES.TRIFONE;
+    } else if (req.user.location) {
+      filter.company = COMPANIES.ACCESSIBLE;
+    }
+  }
+
+  const products = await Product.find(filter)
+    .sort({ name: 1 })
+    .select("name company");
+
+  res.json({
+    products: products.map((p) => ({ name: p.name, company: p.company })),
+  });
 }));
 
 router.get("/summary", requireRole("cfo"), asyncHandler(async (req, res) => {
@@ -65,30 +115,83 @@ router.get("/summary", requireRole("cfo"), asyncHandler(async (req, res) => {
   res.json(summarizeRecords(records));
 }));
 
+router.get("/my-summary", requireRole("clerk"), asyncHandler(async (req, res) => {
+  const filter = buildFilter(req.query);
+  filter.enteredBy = req.user._id;
+
+  if (req.user.assignedCompany === COMPANIES.TRIFONE) {
+    filter.company = COMPANIES.TRIFONE;
+  } else if (req.user.location) {
+    filter.company = COMPANIES.ACCESSIBLE;
+    filter.location = req.user.location;
+  }
+
+  const records = await StockRecord.find(filter).sort({ date: 1 });
+  const productCount = await Product.countDocuments(
+    filter.company ? { company: filter.company } : {}
+  );
+
+  res.json({
+    ...summarizeRecords(records),
+    productCount,
+    assignment: {
+      company: filter.company || null,
+      location: req.user.location || null,
+    },
+  });
+}));
+
+function isAssignedStaff(user) {
+  if (user.assignedCompany === COMPANIES.TRIFONE) return true;
+  if (user.location) return true;
+  return false;
+}
+
 router.post("/", requireRole("clerk"), asyncHandler(async (req, res) => {
+  if (!isAssignedStaff(req.user)) {
+    return res.status(403).json({
+      message: "You have not been assigned yet. Contact CFO.",
+    });
+  }
+
   const data = normalizeRecordInput(req.body);
 
   if (!data.productName) {
     return res.status(400).json({ message: "Product is required" });
   }
 
-  if (!(await isValidProductName(data.productName))) {
+  if (!data.company || !isValidCompany(data.company)) {
+    return res.status(400).json({ message: "Select APL or Trifone." });
+  }
+
+  if (req.user.assignedCompany === COMPANIES.TRIFONE) {
+    if (data.company !== COMPANIES.TRIFONE) {
+      return res.status(403).json({
+        message: "Your account is assigned to Trifone. You can only post Trifone records.",
+      });
+    }
+    data.location = null;
+  } else if (req.user.location) {
+    if (data.company !== COMPANIES.ACCESSIBLE) {
+      return res.status(403).json({
+        message: `Your account is assigned to location ${req.user.location}. You can only post APL records.`,
+      });
+    }
+    data.location = req.user.location;
+  }
+
+  if (!(await isValidProductName(data.productName, data.company))) {
     return res.status(400).json({
-      message: "Select a product from the catalog. Ask the CFO to upload the product list if it is missing.",
+      message: "Select a product from the catalog for the chosen company.",
     });
   }
 
-  if (!data.category) {
-    return res.status(400).json({ message: "Category is required." });
-  }
-
-  if (!(await isValidCategory(data.category))) {
-    return res.status(400).json({
-      message: "Select a valid category. Ask the CFO to add categories first.",
-    });
-  }
-
-  const openingBalance = await getCurrentStock(data.productName, data.category);
+  const openingBalance = await getCurrentStock(
+    data.productName,
+    data.company,
+    null,
+    data.location
+  );
   data.openingBalance = openingBalance;
   data.closingBalance = computeClosingBalance(data);
 
@@ -103,11 +206,17 @@ router.post("/", requireRole("clerk"), asyncHandler(async (req, res) => {
     enteredBy: req.user._id,
   });
 
-  const populated = await record.populate("enteredBy", "name email role");
+  const populated = await record.populate("enteredBy", "name email role location");
   res.status(201).json({ record: populated });
 }));
 
 router.put("/:id", requireRole("clerk"), asyncHandler(async (req, res) => {
+  if (!isAssignedStaff(req.user)) {
+    return res.status(403).json({
+      message: "You have not been assigned yet. Contact CFO.",
+    });
+  }
+
   const existing = await StockRecord.findById(req.params.id);
 
   if (!existing) {
@@ -124,26 +233,43 @@ router.put("/:id", requireRole("clerk"), asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "Product is required" });
   }
 
-  if (!(await isValidProductName(data.productName))) {
-    return res.status(400).json({
-      message: "Select a product from the catalog. Ask the CFO to upload the product list if it is missing.",
-    });
+  if (!data.company || !isValidCompany(data.company)) {
+    return res.status(400).json({ message: "Select APL or Trifone." });
   }
 
-  if (!data.category) {
-    return res.status(400).json({ message: "Category is required." });
+  if (req.user.assignedCompany === COMPANIES.TRIFONE) {
+    if (data.company !== COMPANIES.TRIFONE) {
+      return res.status(403).json({
+        message: "Your account is assigned to Trifone. You can only edit Trifone records.",
+      });
+    }
+    if (existing.company !== COMPANIES.TRIFONE) {
+      return res.status(403).json({ message: "You can only edit Trifone records." });
+    }
+    data.location = null;
+  } else if (req.user.location) {
+    if (data.company !== COMPANIES.ACCESSIBLE) {
+      return res.status(403).json({
+        message: `Your account is assigned to location ${req.user.location}. You can only edit APL records.`,
+      });
+    }
+    if (existing.location && existing.location !== req.user.location) {
+      return res.status(403).json({ message: "You can only edit records for your assigned location." });
+    }
+    data.location = req.user.location;
   }
 
-  if (!(await isValidCategory(data.category))) {
+  if (!(await isValidProductName(data.productName, data.company))) {
     return res.status(400).json({
-      message: "Select a valid category. Ask the CFO to add categories first.",
+      message: "Select a product from the catalog for the chosen company.",
     });
   }
 
   const openingBalance = await getCurrentStock(
     data.productName,
-    data.category,
-    existing._id
+    data.company,
+    existing._id,
+    data.location || existing.location
   );
   data.openingBalance = openingBalance;
   data.closingBalance = computeClosingBalance(data);
@@ -156,7 +282,7 @@ router.put("/:id", requireRole("clerk"), asyncHandler(async (req, res) => {
 
   Object.assign(existing, data);
   await existing.save();
-  const populated = await existing.populate("enteredBy", "name email role");
+  const populated = await existing.populate("enteredBy", "name email role location");
   res.json({ record: populated });
 }));
 

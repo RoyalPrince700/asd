@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { COMPANIES, ACCESSIBLE_LOCATIONS } = require("../constants/companies");
 
 const userSchema = new mongoose.Schema(
   {
@@ -15,6 +16,16 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["clerk", "cfo", "admin"],
       required: true,
+    },
+    assignedCompany: {
+      type: String,
+      enum: [COMPANIES.ACCESSIBLE, COMPANIES.TRIFONE, null],
+      default: null,
+    },
+    location: {
+      type: String,
+      enum: ACCESSIBLE_LOCATIONS,
+      default: null,
     },
   },
   { timestamps: true }

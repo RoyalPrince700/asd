@@ -1,8 +1,13 @@
 const Product = require("../models/Product");
+const { COMPANIES } = require("../constants/companies");
 
-async function isValidProductName(name) {
+async function isValidProductName(name, company) {
   if (!name) return false;
-  const exists = await Product.exists({ name: String(name).trim() });
+  const filter = { name: String(name).trim() };
+  if (company) {
+    filter.company = company;
+  }
+  const exists = await Product.exists(filter);
   return Boolean(exists);
 }
 

@@ -34,7 +34,7 @@ export function Login() {
         <p className="eyebrow">Accessible Stock Dashboard</p>
         <h1>Stock control for the finance office.</h1>
         <p className="lede">
-          Clerks post daily movement. The CFO watches balances, net flow, and
+          Clerks post daily movement. CFO watches balances, net flow, and
           downloads the pack.
         </p>
 
