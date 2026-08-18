@@ -1,0 +1,61 @@
+const path = require("path");
+require("dotenv").config({
+  path: path.join(__dirname, "../.env"),
+  override: true,
+});
+const express = require("express");
+const cors = require("cors");
+const { connectDb } = require("./config/db");
+const authRoutes = require("./routes/auth");
+const userRoutes = require("./routes/users");
+const recordRoutes = require("./routes/records");
+const productRoutes = require("./routes/products");
+const categoryRoutes = require("./routes/categories");
+const reportRoutes = require("./routes/reports");
+const { bootstrapAdmin, bootstrapProducts } = require("./utils/seed");
+
+const app = express();
+const port = Number(process.env.PORT) || 5000;
+
+app.use(
+  cors({
+    origin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
+    credentials: true,
+  })
+);
+app.use(express.json());
+
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true });
+});
+
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/records", recordRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/reports", reportRoutes);
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ message: err.message || "Server error" });
+});
+
+connectDb()
+  .then(async () => {
+    const result = await bootstrapAdmin();
+    if (result.created) {
+      console.log(`Bootstrap admin created: ${result.email}`);
+    }
+    const products = await bootstrapProducts();
+    if (products.bootstrapped) {
+      console.log(`Product catalog bootstrapped with ${products.count} items`);
+    }
+    app.listen(port, () => {
+      console.log(`API listening on http://localhost:${port}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to start server", err);
+    process.exit(1);
+  });
