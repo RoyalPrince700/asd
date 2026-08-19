@@ -40,6 +40,8 @@ export function StaffMovement() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stockIdSearch, setStockIdSearch] = useState("");
+  const [appliedStockId, setAppliedStockId] = useState("");
 
   const closing = useMemo(
     () => openingBalance + n(form.inbound) - n(form.outbound),
@@ -54,8 +56,10 @@ export function StaffMovement() {
     return names;
   }, [products, form.productName]);
 
-  async function loadRecords() {
-    const data = await api.records();
+  async function loadRecords(nextStockId = appliedStockId) {
+    const params = {};
+    if (nextStockId) params.stockId = nextStockId;
+    const data = await api.records(params);
     setRecords(data.records);
   }
 
@@ -111,20 +115,27 @@ export function StaffMovement() {
         stockOut: 0,
       };
 
+      let successMessage = "Transaction posted.";
+
       if (editingId) {
         const result = await api.updateRecord(editingId, payload);
-        setNotice(result.message || "Edit saved and sent to CFO for approval.");
+        successMessage = result.message || "Edit saved and sent to CFO for approval.";
+        setNotice(successMessage);
       } else {
-        await api.createRecord(payload);
-        setNotice("Transaction posted.");
+        const result = await api.createRecord(payload);
+        const stockId = result.record?.stockId;
+        successMessage = stockId
+          ? `Transaction posted. Stock ID ${stockId}.`
+          : "Transaction posted.";
+        setNotice(successMessage);
       }
 
       resetForm();
-      await loadRecords();
+      setStockIdSearch("");
+      setAppliedStockId("");
+      await loadRecords("");
       toast({
-        message: editingId
-          ? "Edit saved. Awaiting CFO approval."
-          : "Transaction posted.",
+        message: successMessage,
         type: "success",
       });
     } catch (err) {
@@ -278,10 +289,41 @@ export function StaffMovement() {
           <h2>Your transactions</h2>
           <span>{records.length} records</span>
         </div>
+        <form
+          className="list-toolbar"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const next = stockIdSearch.trim();
+            setAppliedStockId(next);
+            loadRecords(next).catch((err) => setError(err.message));
+          }}
+        >
+          <input
+            type="search"
+            placeholder="Search by stock ID (e.g. STK-000001)"
+            value={stockIdSearch}
+            onChange={(e) => setStockIdSearch(e.target.value)}
+          />
+          <button type="submit">Search</button>
+          {appliedStockId ? (
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                setStockIdSearch("");
+                setAppliedStockId("");
+                loadRecords("").catch((err) => setError(err.message));
+              }}
+            >
+              Clear
+            </button>
+          ) : null}
+        </form>
         <div className="table-scroll">
           <table>
             <thead>
               <tr>
+                <th>Stock ID</th>
                 <th>Date</th>
                 <th>{isLocationlessStaff ? "Item" : "Product"}</th>
                 <th>Opening</th>
@@ -295,13 +337,16 @@ export function StaffMovement() {
             <tbody>
               {records.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="hint">
-                    No transactions yet. Post your first In or Out above.
+                  <td colSpan={9} className="hint">
+                    {appliedStockId
+                      ? "No transaction matches that stock ID."
+                      : "No transactions yet. Post your first In or Out above."}
                   </td>
                 </tr>
               ) : (
                 records.map((row) => (
                   <tr key={row._id} className={row.pendingApproval ? "row-pending" : undefined}>
+                    <td className="stock-id">{row.stockId || "—"}</td>
                     <td>{row.date.slice(0, 10)}</td>
                     <td>{row.productName}</td>
                     <td>{fmt(row.openingBalance)}</td>

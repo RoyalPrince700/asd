@@ -6,6 +6,7 @@ const StockRecord = require("../models/StockRecord");
 const Product = require("../models/Product");
 const { COMPANIES } = require("../constants/companies");
 const { computeClosingBalance } = require("./stock");
+const { nextStockId } = require("./stockId");
 const { connectDb } = require("../config/db");
 
 const products = [];
@@ -100,6 +101,7 @@ async function seedDatabase({ reset = false } = {}) {
       if (closing < 0) continue;
 
       rows.push({
+        stockId: await nextStockId(),
         productName: product,
         date: daysAgo(i),
         openingBalance: opening,

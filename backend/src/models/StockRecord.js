@@ -3,6 +3,12 @@ const { COMPANIES, ACCESSIBLE_LOCATIONS } = require("../constants/companies");
 
 const stockRecordSchema = new mongoose.Schema(
   {
+    stockId: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
     productName: { type: String, required: true, trim: true },
     company: {
       type: String,

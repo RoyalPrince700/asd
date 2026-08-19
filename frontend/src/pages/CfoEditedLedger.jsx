@@ -169,6 +169,7 @@ export function CfoEditedLedger() {
             <table className="edit-review-table">
               <thead>
                 <tr>
+                  <th>Stock ID</th>
                   <th>Submitted</th>
                   <th>Edited by</th>
                   <th>Company</th>
@@ -188,6 +189,9 @@ export function CfoEditedLedger() {
                   const after = change.proposed;
                   return (
                     <tr key={change._id}>
+                      <td className="stock-id">
+                        {change.recordId?.stockId || "—"}
+                      </td>
                       <td>{fmtDate(change.createdAt)}</td>
                       <td>{submitterLabel(change.submittedBy)}</td>
                       <ChangeCell

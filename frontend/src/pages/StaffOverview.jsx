@@ -43,11 +43,13 @@ export function StaffOverview() {
   const isLocationlessStaff = isLocationlessCompany(user?.assignedCompany);
 
   const [filters, setFilters] = useState({
+    stockId: "",
     productName: "",
     from: "",
     to: "",
   });
   const [applied, setApplied] = useState({
+    stockId: "",
     productName: "",
     from: "",
     to: "",
@@ -100,6 +102,17 @@ export function StaffOverview() {
       </header>
 
       <form className="filter-bar" onSubmit={applyFilters}>
+        <label>
+          Stock ID
+          <input
+            type="search"
+            placeholder="STK-000001"
+            value={filters.stockId}
+            onChange={(e) =>
+              setFilters((prev) => ({ ...prev, stockId: e.target.value }))
+            }
+          />
+        </label>
         <label>
           {isLocationlessStaff ? "Item" : "Product"}
           <select
@@ -234,6 +247,7 @@ export function StaffOverview() {
           <table>
             <thead>
               <tr>
+                <th>Stock ID</th>
                 <th>Date</th>
                 <th>{isLocationlessStaff ? "Item" : "Product"}</th>
                 <th>In</th>
@@ -245,6 +259,7 @@ export function StaffOverview() {
               {records.length ? (
                 records.map((row) => (
                   <tr key={row._id}>
+                    <td className="stock-id">{row.stockId || "—"}</td>
                     <td>{row.date.slice(0, 10)}</td>
                     <td>{row.productName}</td>
                     <td>{fmt(row.inbound)}</td>
@@ -253,11 +268,11 @@ export function StaffOverview() {
                   </tr>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={5} className="hint">
-                    No transactions yet.
-                  </td>
-                </tr>
+                  <tr>
+                    <td colSpan={6} className="hint">
+                      No transactions yet.
+                    </td>
+                  </tr>
               )}
             </tbody>
           </table>

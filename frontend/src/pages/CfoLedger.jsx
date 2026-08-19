@@ -14,6 +14,7 @@ function fmt(value) {
 
 export function CfoLedger() {
   const [filters, setFilters] = useState({
+    stockId: "",
     productName: "",
     company: "",
     location: "",
@@ -21,6 +22,7 @@ export function CfoLedger() {
     to: "",
   });
   const [applied, setApplied] = useState({
+    stockId: "",
     productName: "",
     company: "",
     location: "",
@@ -93,7 +95,7 @@ export function CfoLedger() {
           <p className="eyebrow">Chief Financial Officer</p>
           <h1>Ledger lines</h1>
           <p className="lede tight">
-            Live feed of clerk postings. Filter by company, product, location, or date range,
+            Live feed of clerk postings. Filter by stock ID, company, product, location, or date range,
             then export the full listing.
           </p>
         </div>
@@ -117,6 +119,17 @@ export function CfoLedger() {
       </header>
 
       <form className="filter-bar" onSubmit={applyFilters}>
+        <label>
+          Stock ID
+          <input
+            type="search"
+            placeholder="STK-000001"
+            value={filters.stockId}
+            onChange={(e) =>
+              setFilters((p) => ({ ...p, stockId: e.target.value }))
+            }
+          />
+        </label>
         <label>
           Company
           <select
@@ -207,6 +220,7 @@ export function CfoLedger() {
               <table>
                 <thead>
                   <tr>
+                    <th>Stock ID</th>
                     <th>Date</th>
                     <th>Company</th>
                     <th>Location</th>
@@ -221,6 +235,7 @@ export function CfoLedger() {
                 <tbody>
                   {records.map((row) => (
                     <tr key={row._id}>
+                      <td className="stock-id">{row.stockId || "—"}</td>
                       <td>{row.date.slice(0, 10)}</td>
                       <td>{companyLabel(row.company, { short: true })}</td>
                       <td>{row.location || "—"}</td>

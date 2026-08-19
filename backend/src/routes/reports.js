@@ -17,6 +17,7 @@ const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const { summarizeRecords } = require("../utils/stock");
 const { companyLabel } = require("../constants/companies");
+const { applyStockIdFilter } = require("../utils/stockId");
 
 const router = express.Router();
 
@@ -30,6 +31,8 @@ function enteredByLabel(user) {
 
 function buildFilter(query) {
   const filter = {};
+  applyStockIdFilter(filter, query);
+  if (filter.stockId) return filter;
 
   if (query.productName) {
     filter.productName = new RegExp(String(query.productName).trim(), "i");
@@ -85,6 +88,7 @@ router.get("/excel", asyncHandler(async (req, res) => {
 
   const sheet = workbook.addWorksheet("Stock Movement");
   sheet.columns = [
+    { header: "Stock ID", key: "stockId", width: 14 },
     { header: "Date", key: "date", width: 14 },
     { header: "Company", key: "company", width: 14 },
     { header: "Product", key: "productName", width: 28 },
@@ -106,6 +110,7 @@ router.get("/excel", asyncHandler(async (req, res) => {
 
   for (const row of records) {
     sheet.addRow({
+      stockId: row.stockId || "",
       date: formatDate(row.date),
       company: companyLabel(row.company, { short: true }),
       productName: row.productName,
@@ -191,6 +196,7 @@ router.get("/docx", asyncHandler(async (req, res) => {
 
   const header = new TableRow({
     children: [
+      "Stock ID",
       "Date",
       "Company",
       "Product",
@@ -209,6 +215,7 @@ router.get("/docx", asyncHandler(async (req, res) => {
     (row) =>
       new TableRow({
         children: [
+          cell(row.stockId || "—"),
           cell(formatDate(row.date)),
           cell(companyLabel(row.company, { short: true })),
           cell(row.productName),
@@ -305,6 +312,7 @@ router.get("/ledger/excel", asyncHandler(async (req, res) => {
 
   const sheet = workbook.addWorksheet("Ledger Lines");
   sheet.columns = [
+    { header: "Stock ID", key: "stockId", width: 14 },
     { header: "Date", key: "date", width: 14 },
     { header: "Company", key: "company", width: 14 },
     { header: "Location", key: "location", width: 12 },
@@ -325,6 +333,7 @@ router.get("/ledger/excel", asyncHandler(async (req, res) => {
 
   for (const row of records) {
     sheet.addRow({
+      stockId: row.stockId || "",
       date: formatDate(row.date),
       company: companyLabel(row.company, { short: true }),
       location: row.location || "",
@@ -366,6 +375,7 @@ router.get("/ledger/docx", asyncHandler(async (req, res) => {
 
   const header = new TableRow({
     children: [
+      "Stock ID",
       "Date",
       "Company",
       "Location",
@@ -384,6 +394,7 @@ router.get("/ledger/docx", asyncHandler(async (req, res) => {
     (row) =>
       new TableRow({
         children: [
+          cell(row.stockId || "—"),
           cell(formatDate(row.date)),
           cell(companyLabel(row.company, { short: true })),
           cell(row.location || "—"),

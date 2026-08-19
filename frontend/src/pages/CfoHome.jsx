@@ -39,6 +39,7 @@ const emptySummary = {
 
 export function CfoHome() {
   const [filters, setFilters] = useState({
+    stockId: "",
     productName: "",
     company: "",
     location: "",
@@ -46,6 +47,7 @@ export function CfoHome() {
     to: "",
   });
   const [applied, setApplied] = useState({
+    stockId: "",
     productName: "",
     company: "",
     location: "",
@@ -131,6 +133,17 @@ export function CfoHome() {
       </header>
 
       <form className="filter-bar" onSubmit={applyFilters}>
+        <label>
+          Stock ID
+          <input
+            type="search"
+            placeholder="STK-000001"
+            value={filters.stockId}
+            onChange={(e) =>
+              setFilters((p) => ({ ...p, stockId: e.target.value }))
+            }
+          />
+        </label>
         <label>
           Company
           <select
@@ -271,7 +284,7 @@ export function CfoHome() {
           </Link>
         </div>
         <p className="hint">
-          Browse, filter, and export the full clerk posting history on the dedicated ledger page.
+          Browse, filter by stock ID, and export the full clerk posting history on the dedicated ledger page.
         </p>
       </section>
     </div>

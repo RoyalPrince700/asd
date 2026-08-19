@@ -735,6 +735,12 @@ th {
   min-width: 220px;
 }
 
+.stock-id {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
 .pagination {
   display: flex;
   justify-content: space-between;

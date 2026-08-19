@@ -18,6 +18,7 @@ const {
   pendingChangeMapForRecords,
   attachPendingMeta,
 } = require("../utils/recordChanges");
+const { applyStockIdFilter, nextStockId } = require("../utils/stockId");
 
 const router = express.Router();
 
@@ -25,6 +26,8 @@ router.use(protect);
 
 function buildFilter(query) {
   const filter = {};
+  applyStockIdFilter(filter, query);
+  if (filter.stockId) return filter;
 
   if (query.productName) {
     filter.productName = new RegExp(String(query.productName).trim(), "i");
@@ -109,11 +112,13 @@ router.get("/", asyncHandler(async (req, res) => {
       filter.location = req.user.location;
     }
   } else if (req.user.role === "accountant") {
-    if (!filter.company) {
-      return res.status(400).json({ message: "Company filter is required." });
-    }
-    if (filter.company === COMPANIES.ACCESSIBLE && !filter.location) {
-      return res.status(400).json({ message: "Location filter is required for APL." });
+    if (!filter.stockId) {
+      if (!filter.company) {
+        return res.status(400).json({ message: "Company filter is required." });
+      }
+      if (filter.company === COMPANIES.ACCESSIBLE && !filter.location) {
+        return res.status(400).json({ message: "Location filter is required for APL." });
+      }
     }
   }
 
@@ -261,6 +266,7 @@ router.post("/", requireRole("clerk", "accountant"), asyncHandler(async (req, re
 
   const record = await StockRecord.create({
     ...data,
+    stockId: await nextStockId(),
     enteredBy: req.user._id,
   });
 
