@@ -19,10 +19,27 @@ const { bootstrapAdmin, bootstrapProducts } = require("./utils/seed");
 
 const app = express();
 const port = Number(process.env.PORT) || 5000;
+const host = process.env.HOST || "0.0.0.0";
+const allowedOrigins = String(process.env.CLIENT_ORIGIN || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (!allowedOrigins.length) {
+  throw new Error(
+    "Set CLIENT_ORIGIN in the environment to your frontend URL (comma-separated if you have more than one)."
+  );
+}
 
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   })
 );
@@ -57,8 +74,8 @@ connectDb()
     if (products.bootstrapped) {
       console.log(`Product catalog bootstrapped with ${products.count} items`);
     }
-    app.listen(port, () => {
-      console.log(`API listening on http://localhost:${port}`);
+    app.listen(port, host, () => {
+      console.log(`API listening on ${host}:${port}`);
     });
   })
   .catch((err) => {
