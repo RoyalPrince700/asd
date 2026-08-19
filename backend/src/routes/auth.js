@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { jwtSecret } = require("../config/env");
 const { protect } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
 
@@ -10,7 +11,7 @@ const router = express.Router();
 function signToken(user) {
   return jwt.sign(
     { id: user._id, role: user.role },
-    process.env.JWT_SECRET,
+    jwtSecret,
     { expiresIn: "7d" }
   );
 }

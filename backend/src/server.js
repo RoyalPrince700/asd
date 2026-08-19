@@ -1,10 +1,6 @@
-const path = require("path");
-require("dotenv").config({
-  path: path.join(__dirname, "../.env"),
-  override: true,
-});
 const express = require("express");
 const cors = require("cors");
+const { port, host, allowedOrigins } = require("./config/env");
 const { connectDb } = require("./config/db");
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
@@ -18,18 +14,6 @@ const analysisRoutes = require("./routes/analysis");
 const { bootstrapAdmin, bootstrapProducts } = require("./utils/seed");
 
 const app = express();
-const port = Number(process.env.PORT) || 5000;
-const host = process.env.HOST || "0.0.0.0";
-const allowedOrigins = String(process.env.CLIENT_ORIGIN || "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
-if (!allowedOrigins.length) {
-  throw new Error(
-    "Set CLIENT_ORIGIN in the environment to your frontend URL (comma-separated if you have more than one)."
-  );
-}
 
 app.use(
   cors({

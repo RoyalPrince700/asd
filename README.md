@@ -107,6 +107,7 @@ Copy from `backend/.env.example`:
 
 ```env
 PORT=5000
+HOST=0.0.0.0
 MONGO_URI=mongodb+srv://USER:PASSWORD@cluster.mongodb.net/cfodashboard
 JWT_SECRET=your-secret-key
 CLIENT_ORIGIN=http://localhost:5173
@@ -131,11 +132,10 @@ ADMIN_NAME=System Admin
 Copy from `frontend/.env.example`:
 
 ```env
-# Leave empty for local dev — Vite proxies /api to localhost:5000
-VITE_API_URL=
+VITE_API_URL=http://localhost:5000
 ```
 
-For production, set `VITE_API_URL` to your deployed API URL (e.g. `https://your-app.onrender.com`).
+This is the **backend** URL, not the frontend URL. On Vercel, set `VITE_API_URL` to your Render API (e.g. `https://your-app.onrender.com`) and redeploy.
 
 ## Setup
 
@@ -255,11 +255,18 @@ All protected routes require `Authorization: Bearer <token>`.
 
 ## Production notes
 
-- Set a strong `JWT_SECRET` in production
-- Set `CLIENT_ORIGIN` to your frontend URL for CORS
-- Set `VITE_API_URL` on the frontend to the deployed API
-- Run the backend with `npm start` inside `backend/`
-- Build the frontend with `npm run build` inside `frontend/`
+### Render (backend)
+
+- Root directory: `backend`
+- Start command: `npm start`
+- `PORT` is set by Render
+- Set `MONGO_URI`, `JWT_SECRET`, and `CLIENT_ORIGIN` (your Vercel URL, e.g. `https://your-app.vercel.app`)
+
+### Vercel (frontend)
+
+- Root directory: `frontend`
+- Set `VITE_API_URL` to your Render URL (e.g. `https://your-app.onrender.com`)
+- Redeploy after changing `VITE_API_URL` — Vite inlines it at build time
 
 ## License
 

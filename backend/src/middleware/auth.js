@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { jwtSecret } = require("../config/env");
 const User = require("../models/User");
 
 async function protect(req, res, next) {
@@ -10,7 +11,7 @@ async function protect(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, jwtSecret);
     const user = await User.findById(payload.id).select("-password");
 
     if (!user) {

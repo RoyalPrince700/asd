@@ -1,6 +1,12 @@
 const TOKEN_KEY = "cfo_token";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const API_BASE = String(import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
+if (!API_BASE) {
+  throw new Error(
+    "Missing VITE_API_URL. Set it to your backend URL in frontend/.env (local) or Vercel env (production)."
+  );
+}
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
