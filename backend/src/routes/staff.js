@@ -2,9 +2,15 @@ const express = require("express");
 const User = require("../models/User");
 const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
-const { COMPANIES, ACCESSIBLE_LOCATIONS } = require("../constants/companies");
+const { COMPANIES, ACCESSIBLE_LOCATIONS, isLocationlessCompany } = require("../constants/companies");
 
 const router = express.Router();
+
+console.log("[staff] route loaded", {
+  isLocationlessCompany: typeof isLocationlessCompany,
+  companies: Object.values(COMPANIES),
+  locations: ACCESSIBLE_LOCATIONS,
+});
 
 function publicStaff(user) {
   return {
@@ -19,9 +25,20 @@ function publicStaff(user) {
 }
 
 function applyStaffAssignment(user, assignment) {
+  console.log("[staff] applyStaffAssignment", {
+    userId: String(user._id),
+    assignment,
+    assignmentType: typeof assignment,
+    before: {
+      assignedCompany: user.assignedCompany,
+      location: user.location,
+      role: user.role,
+    },
+  });
+
   if (assignment === null || assignment === "" || assignment === undefined) {
     user.assignedCompany = null;
-    user.location = null;
+    user.location = undefined;
     return;
   }
 
@@ -29,7 +46,8 @@ function applyStaffAssignment(user, assignment) {
 
   if (isLocationlessCompany(normalized)) {
     user.assignedCompany = normalized;
-    user.location = null;
+    user.location = undefined;
+    console.log("[staff] assigned locationless company", { normalized });
     return;
   }
 
@@ -42,6 +60,7 @@ function applyStaffAssignment(user, assignment) {
 
   user.assignedCompany = COMPANIES.ACCESSIBLE;
   user.location = location;
+  console.log("[staff] assigned APL location", { location });
 }
 
 router.use(protect, requireRole("cfo"));
@@ -59,12 +78,24 @@ router.get(
 router.patch(
   "/:id",
   asyncHandler(async (req, res) => {
+    console.log("[staff PATCH] incoming", {
+      paramsId: req.params.id,
+      body: req.body,
+      actor: {
+        id: String(req.user?._id || ""),
+        email: req.user?.email,
+        role: req.user?.role,
+      },
+    });
+
     const user = await User.findById(req.params.id);
     if (!user) {
+      console.warn("[staff PATCH] not found", req.params.id);
       return res.status(404).json({ message: "Staff member not found" });
     }
 
     if (user.role !== "clerk" && user.role !== "accountant") {
+      console.warn("[staff PATCH] invalid role to manage", user.role);
       return res.status(400).json({
         message: "Only clerk or accountant accounts can be managed here.",
       });
@@ -80,12 +111,13 @@ router.patch(
       user.role = role;
       if (role === "accountant") {
         user.assignedCompany = null;
-        user.location = null;
+        user.location = undefined;
       }
     }
 
     if (user.role === "accountant") {
       await user.save();
+      console.log("[staff PATCH] saved accountant", publicStaff(user));
       return res.json({ staff: publicStaff(user) });
     }
 
@@ -108,10 +140,34 @@ router.patch(
         return res.status(400).json({ message: "Assignment or role is required." });
       }
     } catch (err) {
+      console.error("[staff PATCH] assignment rejected", {
+        message: err.message,
+        stack: err.stack,
+      });
       return res.status(400).json({ message: err.message });
     }
 
-    await user.save();
+    try {
+      await user.save();
+    } catch (err) {
+      console.error("[staff PATCH] mongoose save failed", {
+        name: err.name,
+        message: err.message,
+        errors: err.errors
+          ? Object.fromEntries(
+              Object.entries(err.errors).map(([key, value]) => [
+                key,
+                value.message,
+              ])
+            )
+          : undefined,
+      });
+      return res.status(400).json({
+        message: err.message || "Could not save staff assignment.",
+      });
+    }
+
+    console.log("[staff PATCH] saved", publicStaff(user));
     res.json({ staff: publicStaff(user) });
   })
 );

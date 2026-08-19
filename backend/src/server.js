@@ -58,8 +58,17 @@ connectDb()
     if (products.bootstrapped) {
       console.log(`Product catalog bootstrapped with ${products.count} items`);
     }
-    app.listen(port, host, () => {
+    const server = app.listen(port, host, () => {
       console.log(`API listening on ${host}:${port}`);
+      console.log(`Health check: http://127.0.0.1:${port}/api/health`);
+    });
+    server.on("error", (err) => {
+      console.error("[server] failed to bind", {
+        host,
+        port,
+        code: err.code,
+        message: err.message,
+      });
     });
   })
   .catch((err) => {

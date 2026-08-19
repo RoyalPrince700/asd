@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema(
     },
     location: {
       type: String,
-      enum: ACCESSIBLE_LOCATIONS,
+      enum: [...ACCESSIBLE_LOCATIONS, null],
       default: null,
     },
   },

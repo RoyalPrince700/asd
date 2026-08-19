@@ -8,6 +8,11 @@ if (!API_BASE) {
   );
 }
 
+console.log("[API] client configured", {
+  apiBase: API_BASE,
+  pageOrigin: typeof window !== "undefined" ? window.location.origin : "ssr",
+});
+
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -15,6 +20,39 @@ export function getToken() {
 export function setToken(token) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
+}
+
+function debugApi(label, details) {
+  console.log(`[API] ${label}`, details);
+}
+
+function parseBodyForLog(body) {
+  if (!body) return undefined;
+  if (body instanceof FormData) return "[FormData]";
+  if (typeof body !== "string") return body;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return body;
+  }
+}
+
+async function probeApiHealth() {
+  const url = `${API_BASE}/api/health`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json().catch(() => ({}));
+    debugApi("health probe", { url, status: res.status, ok: res.ok, data });
+    return { reachable: res.ok, status: res.status, data };
+  } catch (err) {
+    debugApi("health probe failed — backend is not reachable", {
+      url,
+      name: err.name,
+      message: err.message,
+      cause: err.cause,
+    });
+    return { reachable: false, error: err.message };
+  }
 }
 
 async function request(path, options = {}) {
@@ -28,11 +66,51 @@ async function request(path, options = {}) {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const method = options.method || "GET";
+  const url = `${API_BASE}${path}`;
+  debugApi("request", {
+    method,
+    url,
+    path,
+    apiBase: API_BASE,
+    hasToken: Boolean(token),
+    body: parseBodyForLog(options.body),
+  });
+
+  let res;
+  try {
+    res = await fetch(url, { ...options, headers });
+  } catch (err) {
+    const health = await probeApiHealth();
+    const details = {
+      method,
+      url,
+      apiBase: API_BASE,
+      name: err.name,
+      message: err.message,
+      cause: err.cause,
+      health,
+    };
+    console.error("[API] network failure (connection refused / failed to fetch)", details);
+    throw new Error(
+      health.reachable
+        ? `Network error calling ${url}: ${err.message}`
+        : `Cannot reach the API at ${API_BASE}. Start the backend with npm run dev in the backend folder, then retry. (${err.message})`
+    );
+  }
+
+  debugApi("response", {
+    method,
+    url,
+    status: res.status,
+    ok: res.ok,
+    statusText: res.statusText,
+  });
 
   if (options.blob) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: "Download failed" }));
+      console.error("[API] download failed", { url, status: res.status, err });
       throw new Error(err.message || "Download failed");
     }
     return res.blob();
@@ -40,7 +118,13 @@ async function request(path, options = {}) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.message || "Request failed");
+    console.error("[API] request failed", {
+      method,
+      url,
+      status: res.status,
+      body: data,
+    });
+    throw new Error(data.message || `Request failed (${res.status})`);
   }
   return data;
 }

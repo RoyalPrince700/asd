@@ -42,13 +42,33 @@ export function CfoStaff() {
     setBusyId(id);
     setError("");
     setSavedId("");
+    const member = staff.find((item) => item.id === id);
+    console.log("[CfoStaff] update start", {
+      id,
+      payload,
+      current: member
+        ? {
+            name: member.name,
+            role: member.role,
+            assignedCompany: member.assignedCompany,
+            location: member.location,
+          }
+        : null,
+    });
     try {
       const data = await api.updateStaff(id, payload);
+      console.log("[CfoStaff] update success", data.staff);
       setStaff((list) =>
         list.map((item) => (item.id === id ? data.staff : item))
       );
       setSavedId(id);
     } catch (err) {
+      console.error("[CfoStaff] update failed", {
+        id,
+        payload,
+        message: err.message,
+        error: err,
+      });
       setError(err.message);
     } finally {
       setBusyId("");
@@ -56,10 +76,12 @@ export function CfoStaff() {
   }
 
   function updateRole(id, role) {
+    console.log("[CfoStaff] role change", { id, role });
     updateStaffMember(id, { role });
   }
 
   function updateAssignment(id, assignment) {
+    console.log("[CfoStaff] assignment change", { id, assignment });
     updateStaffMember(id, { assignment: assignment || null });
   }
 
