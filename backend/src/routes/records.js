@@ -187,7 +187,19 @@ router.get("/products", asyncHandler(async (req, res) => {
 router.get("/summary", requireRole("cfo"), asyncHandler(async (req, res) => {
   const filter = buildFilter(req.query);
   const records = await StockRecord.find(filter).sort({ date: 1 });
-  res.json(summarizeRecords(records));
+
+  const productQuery = {};
+  const company = String(req.query.company || "").trim().toLowerCase();
+  if (isValidCompany(company)) {
+    productQuery.company = company;
+  }
+
+  const productCount = await Product.countDocuments(productQuery);
+
+  res.json({
+    ...summarizeRecords(records),
+    productCount,
+  });
 }));
 
 router.get("/my-summary", requireRole("clerk"), asyncHandler(async (req, res) => {

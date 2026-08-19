@@ -35,7 +35,16 @@ const emptySummary = {
   byProduct: [],
   byCompany: [],
   byDate: [],
+  productCount: 0,
 };
+
+function companiesHint(companies) {
+  const labels = companies.map((item) => item.shortLabel);
+  if (!labels.length) return "No companies";
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+}
 
 export function CfoHome() {
   const [filters, setFilters] = useState({
@@ -64,6 +73,33 @@ export function CfoHome() {
     return products.filter((product) => product.company === filters.company);
   }, [products, filters.company]);
 
+  const catalogProducts = useMemo(() => {
+    if (!applied.company) return products;
+    return products.filter((product) => product.company === applied.company);
+  }, [products, applied.company]);
+
+  const visibleCompanies = useMemo(() => {
+    if (!applied.company) return COMPANY_OPTIONS;
+    return COMPANY_OPTIONS.filter((item) => item.id === applied.company);
+  }, [applied.company]);
+
+  const catalogCount =
+    typeof summary.productCount === "number"
+      ? summary.productCount
+      : catalogProducts.length;
+
+  const scopeLabel = useMemo(() => {
+    const parts = [];
+    if (applied.company) parts.push(companyLabel(applied.company));
+    if (applied.location) parts.push(applied.location);
+    if (applied.productName) parts.push(applied.productName);
+    if (applied.stockId) parts.push(applied.stockId);
+    if (applied.from || applied.to) {
+      parts.push(`${applied.from || "…"} – ${applied.to || "…"}`);
+    }
+    return parts.length ? parts.join(" · ") : "All companies";
+  }, [applied]);
+
   const chartCompanies = useMemo(
     () =>
       summary.byCompany.map((row) => ({
@@ -72,6 +108,20 @@ export function CfoHome() {
       })),
     [summary.byCompany]
   );
+
+  const companyScoped = Boolean(applied.company);
+
+  const barChartData = useMemo(() => {
+    if (!companyScoped) return chartCompanies;
+    return summary.byProduct
+      .slice()
+      .sort((a, b) => b.closingBalance - a.closingBalance)
+      .slice(0, 12)
+      .map((row) => ({
+        ...row,
+        label: row.productName,
+      }));
+  }, [companyScoped, chartCompanies, summary.byProduct]);
 
   async function load(params = applied) {
     const [sum, prod] = await Promise.all([
@@ -104,6 +154,12 @@ export function CfoHome() {
     }
   }
 
+  const ledgerHref = useMemo(() => {
+    const entries = Object.entries(applied).filter(([, value]) => value);
+    if (!entries.length) return "/ledger";
+    return `/ledger?${new URLSearchParams(entries).toString()}`;
+  }, [applied]);
+
   const t = summary.totals;
 
   return (
@@ -112,6 +168,7 @@ export function CfoHome() {
         <div>
           <p className="eyebrow">Chief Financial Officer</p>
           <h1>Stock position</h1>
+          <p className="lede tight">{scopeLabel}</p>
         </div>
         <div className="export-row">
           <button
@@ -223,13 +280,17 @@ export function CfoHome() {
       <section className="kpi-grid">
         <Kpi
           label="Products in catalog"
-          value={products.length.toLocaleString()}
-          hint="Uploaded by CFO"
+          value={catalogCount.toLocaleString()}
+          hint={
+            applied.company
+              ? companyLabel(applied.company, { short: true })
+              : "Uploaded by CFO"
+          }
         />
         <Kpi
           label="Companies"
-          value={COMPANY_OPTIONS.length.toLocaleString()}
-          hint="APL, Trifone Gadgets, and Trifone Electronics"
+          value={visibleCompanies.length.toLocaleString()}
+          hint={companiesHint(visibleCompanies)}
         />
         <Kpi label="Opening" value={fmt(t.openingBalance)} />
         <Kpi label="In" value={fmt(t.inbound)} tone="up" />
@@ -246,32 +307,40 @@ export function CfoHome() {
         <article className="panel">
           <h2>Daily movement</h2>
           <div className="chart">
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={summary.byDate}>
-                <CartesianGrid stroke="#e7e0d4" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="inbound" name="In" stroke="#1f6b4a" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="outbound" name="Out" stroke="#9a3412" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="closingBalance" name="Closing" stroke="#132337" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            {summary.byDate.length ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={summary.byDate}>
+                  <CartesianGrid stroke="#e7e0d4" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="inbound" name="In" stroke="#1f6b4a" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="outbound" name="Out" stroke="#9a3412" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="closingBalance" name="Closing" stroke="#132337" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="hint empty-hint">No movement data for this filter.</p>
+            )}
           </div>
         </article>
         <article className="panel">
-          <h2>Closing by company</h2>
+          <h2>{companyScoped ? "Closing by product" : "Closing by company"}</h2>
           <div className="chart">
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartCompanies}>
-                <CartesianGrid stroke="#e7e0d4" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={-18} textAnchor="end" height={70} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="closingBalance" name="Closing balance" fill="#132337" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {barChartData.length ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={barChartData}>
+                  <CartesianGrid stroke="#e7e0d4" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={-18} textAnchor="end" height={70} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Bar dataKey="closingBalance" name="Closing balance" fill="#132337" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="hint empty-hint">No closing balances for this filter.</p>
+            )}
           </div>
         </article>
       </section>
@@ -279,7 +348,7 @@ export function CfoHome() {
       <section className="panel ledger-link-card">
         <div className="section-head">
           <h2>Ledger lines</h2>
-          <Link to="/ledger" className="text-btn">
+          <Link to={ledgerHref} className="text-btn">
             View all ledger lines →
           </Link>
         </div>

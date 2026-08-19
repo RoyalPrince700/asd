@@ -255,7 +255,9 @@ router.get("/my-inventory", requireRole("clerk", "accountant"), asyncHandler(asy
 
 router.get("/", asyncHandler(async (req, res) => {
   const search = String(req.query.search || "").trim();
-  const company = resolveCompany(req.query.company);
+  const company = req.query.company
+    ? resolveCompany(req.query.company)
+    : null;
   const page = Number(req.query.page);
   const limit = Number(req.query.limit);
   const live = String(req.query.live || "") === "1" || req.query.live === "true";

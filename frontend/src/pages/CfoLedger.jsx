@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel, isLocationlessCompany } from "../constants/companies";
 import { enteredByLabel } from "../utils/role.js";
@@ -12,23 +12,22 @@ function fmt(value) {
   });
 }
 
+function filtersFromSearch(searchParams) {
+  return {
+    stockId: searchParams.get("stockId") || "",
+    productName: searchParams.get("productName") || "",
+    company: searchParams.get("company") || "",
+    location: searchParams.get("location") || "",
+    from: searchParams.get("from") || "",
+    to: searchParams.get("to") || "",
+  };
+}
+
 export function CfoLedger() {
-  const [filters, setFilters] = useState({
-    stockId: "",
-    productName: "",
-    company: "",
-    location: "",
-    from: "",
-    to: "",
-  });
-  const [applied, setApplied] = useState({
-    stockId: "",
-    productName: "",
-    company: "",
-    location: "",
-    from: "",
-    to: "",
-  });
+  const [searchParams] = useSearchParams();
+  const initialFilters = filtersFromSearch(searchParams);
+  const [filters, setFilters] = useState(initialFilters);
+  const [applied, setApplied] = useState(initialFilters);
   const [records, setRecords] = useState([]);
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
