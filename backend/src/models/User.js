@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema(
     },
     assignedCompany: {
       type: String,
-      enum: [COMPANIES.ACCESSIBLE, COMPANIES.TRIFONE, null],
+      enum: [...Object.values(COMPANIES), null],
       default: null,
     },
     location: {

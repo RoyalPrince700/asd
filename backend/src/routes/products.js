@@ -10,18 +10,23 @@ const {
   COMPANY_LABELS,
   ACCESSIBLE_LOCATIONS,
   TRIFONE_AUGUST_FIELDS,
+  ELECTRONICS_FIELDS,
   emptyAccessibleStock,
   emptyTrifoneData,
+  emptyElectronicsData,
+  isLocationlessCompany,
 } = require("../constants/companies");
 const {
   parseAccessibleInventoryExcel,
   parseTrifoneInventoryExcel,
+  parseElectronicsInventoryExcel,
   getCurrentStock,
   buildStockSnapshot,
   buildMovementMap,
   liveAccessibleStock,
   liveLocationBalance,
   liveTrifoneBalance,
+  liveLocationlessBalance,
 } = require("../utils/inventory");
 
 const router = express.Router();
@@ -62,6 +67,10 @@ function visibleTrifoneFields(hiddenColumns = []) {
   return TRIFONE_AUGUST_FIELDS.filter((field) => !hiddenColumns.includes(field.key));
 }
 
+function visibleElectronicsFields(hiddenColumns = []) {
+  return ELECTRONICS_FIELDS.filter((field) => !hiddenColumns.includes(field.key));
+}
+
 function formatAccessibleProduct(row, visibleLocations = ACCESSIBLE_LOCATIONS) {
   const stock = row.stock?.toObject?.() || row.stock || emptyAccessibleStock();
   const allTotal = visibleLocations.reduce(
@@ -90,6 +99,19 @@ function formatTrifoneProduct(row) {
   };
 }
 
+function formatElectronicsProduct(row) {
+  const electronicsData =
+    row.electronicsData?.toObject?.() || row.electronicsData || emptyElectronicsData();
+
+  return {
+    _id: row._id,
+    name: row.name,
+    company: row.company,
+    electronicsData,
+    currentStock: Number(electronicsData.currentStock) || 0,
+  };
+}
+
 function formatProduct(row, { live = false, movementMap = null, visibleLocations = ACCESSIBLE_LOCATIONS } = {}) {
   if (row.company === COMPANIES.TRIFONE) {
     const product = formatTrifoneProduct(row);
@@ -103,9 +125,23 @@ function formatProduct(row, { live = false, movementMap = null, visibleLocations
     return product;
   }
 
+  if (row.company === COMPANIES.ELECTRONICS) {
+    const product = formatElectronicsProduct(row);
+    if (live && movementMap) {
+      const currentStock = liveLocationlessBalance(row, movementMap);
+      product.electronicsData = {
+        ...product.electronicsData,
+        currentStock,
+      };
+      product.currentStock = currentStock;
+      product.live = true;
+    }
+    return product;
+  }
+
   const product = formatAccessibleProduct(row, visibleLocations);
   if (live && movementMap) {
-    const { stock, allTotal } = liveAccessibleStock(row, movementMap);
+    const { stock } = liveAccessibleStock(row, movementMap);
     product.stock = stock;
     product.allTotal = visibleLocations.reduce(
       (sum, loc) => sum + (Number(stock[loc]) || 0),
@@ -117,13 +153,23 @@ function formatProduct(row, { live = false, movementMap = null, visibleLocations
 }
 
 function resolveStaffAssignment(user) {
-  if (user.assignedCompany === COMPANIES.TRIFONE) {
-    return { company: COMPANIES.TRIFONE, location: null };
+  if (isLocationlessCompany(user.assignedCompany)) {
+    return { company: user.assignedCompany, location: null };
   }
   if (user.location) {
     return { company: COMPANIES.ACCESSIBLE, location: user.location };
   }
   return null;
+}
+
+function catalogOpeningFromRow(row) {
+  if (row.company === COMPANIES.ELECTRONICS) {
+    const data =
+      row.electronicsData?.toObject?.() || row.electronicsData || emptyElectronicsData();
+    return Number(data.currentStock) || 0;
+  }
+  const trifoneData = row.trifoneData?.toObject?.() || row.trifoneData || emptyTrifoneData();
+  return Number(trifoneData.currentStock) || 0;
 }
 
 router.get("/my-inventory", requireRole("clerk", "accountant"), asyncHandler(async (req, res) => {
@@ -170,19 +216,18 @@ router.get("/my-inventory", requireRole("clerk", "accountant"), asyncHandler(asy
     .sort({ name: 1 })
     .skip((page - 1) * limit)
     .limit(limit)
-    .select("name company stock trifoneData");
+    .select("name company stock trifoneData electronicsData");
 
   const movementMap = await buildMovementMap(company, location);
 
   const products = rows.map((row) => {
-    if (company === COMPANIES.TRIFONE) {
-      const trifoneData = row.trifoneData?.toObject?.() || row.trifoneData || emptyTrifoneData();
+    if (isLocationlessCompany(company)) {
       return {
         _id: row._id,
         name: row.name,
         company: row.company,
-        openingBalance: Number(trifoneData.currentStock) || 0,
-        balance: liveTrifoneBalance(row, movementMap),
+        openingBalance: catalogOpeningFromRow(row),
+        balance: liveLocationlessBalance(row, movementMap),
       };
     }
 
@@ -229,7 +274,7 @@ router.get("/", asyncHandler(async (req, res) => {
       .sort({ name: 1 })
       .skip((safePage - 1) * safeLimit)
       .limit(safeLimit)
-      .select("name company stock trifoneData");
+      .select("name company stock trifoneData electronicsData");
 
     let movementMap = null;
     if (live && company) {
@@ -238,9 +283,11 @@ router.get("/", asyncHandler(async (req, res) => {
 
     const hiddenColumns = company ? await getHiddenColumns(company) : [];
     const locations =
-      company === COMPANIES.TRIFONE ? [] : visibleAccessibleLocations(hiddenColumns);
+      company === COMPANIES.ACCESSIBLE ? visibleAccessibleLocations(hiddenColumns) : [];
     const trifoneFields =
       company === COMPANIES.TRIFONE ? visibleTrifoneFields(hiddenColumns) : [];
+    const electronicsFields =
+      company === COMPANIES.ELECTRONICS ? visibleElectronicsFields(hiddenColumns) : [];
 
     return res.json({
       products: rows.map((row) =>
@@ -254,6 +301,7 @@ router.get("/", asyncHandler(async (req, res) => {
       live,
       locations,
       trifoneFields,
+      electronicsFields,
       hiddenColumns,
     });
   }
@@ -354,6 +402,52 @@ router.get("/template", requireRole("cfo"), asyncHandler(async (req, res) => {
       stockValueOnHand: 0,
       remarks: "Out of Stock",
     });
+  } else if (company === COMPANIES.ELECTRONICS) {
+    const sheet = workbook.addWorksheet("Inventory Movement");
+    sheet.getRow(1).values = [
+      undefined,
+      "S/N",
+      "DATE",
+      "DETAILS",
+      "JUICE EXTRACTOR",
+      "DIGITAL 10L AIR FRYER",
+      "MANUAL 10L AIR FRYER",
+      "TB 15E BLENDER",
+      "HOT PLATE",
+    ];
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(2).values = [
+      undefined,
+      1,
+      "14/02/2026",
+      "OPENING INVENTORY",
+      160,
+      100,
+      80,
+      400,
+      120,
+    ];
+    sheet.getRow(3).values = [
+      undefined,
+      2,
+      "31/07/2026",
+      "CLOSING BALANCE AS AT JULY",
+      0,
+      64,
+      178,
+      476,
+      148,
+    ];
+    sheet.columns = [
+      { width: 8 },
+      { width: 14 },
+      { width: 32 },
+      { width: 18 },
+      { width: 22 },
+      { width: 22 },
+      { width: 16 },
+      { width: 12 },
+    ];
   } else {
     const sheet = workbook.addWorksheet("Inventory");
     sheet.columns = [
@@ -407,6 +501,12 @@ function resolveUploadMode(value) {
   return mode === "replace" ? "replace" : "update";
 }
 
+function catalogSetFields(company, row) {
+  if (company === COMPANIES.TRIFONE) return { trifoneData: row.trifoneData };
+  if (company === COMPANIES.ELECTRONICS) return { electronicsData: row.electronicsData };
+  return { stock: row.stock };
+}
+
 async function importCatalogRows(company, rows, userId, mode) {
   const label = COMPANY_LABELS[company];
   const existingBefore = await Product.countDocuments({ company });
@@ -419,25 +519,14 @@ async function importCatalogRows(company, rows, userId, mode) {
       { upsert: true }
     );
 
-    if (company === COMPANIES.TRIFONE) {
-      await Product.insertMany(
-        rows.map((row) => ({
-          name: row.name,
-          company,
-          trifoneData: row.trifoneData,
-          uploadedBy: userId,
-        }))
-      );
-    } else {
-      await Product.insertMany(
-        rows.map((row) => ({
-          name: row.name,
-          company,
-          stock: row.stock,
-          uploadedBy: userId,
-        }))
-      );
-    }
+    await Product.insertMany(
+      rows.map((row) => ({
+        name: row.name,
+        company,
+        uploadedBy: userId,
+        ...catalogSetFields(company, row),
+      }))
+    );
 
     const total = await Product.countDocuments({ company });
     return {
@@ -462,9 +551,7 @@ async function importCatalogRows(company, rows, userId, mode) {
           company,
           name: row.name,
           uploadedBy: userId,
-          ...(company === COMPANIES.TRIFONE
-            ? { trifoneData: row.trifoneData }
-            : { stock: row.stock }),
+          ...catalogSetFields(company, row),
         },
       },
       upsert: true,
@@ -520,6 +607,8 @@ router.post(
     let rows = [];
     if (company === COMPANIES.TRIFONE) {
       rows = await parseTrifoneInventoryExcel(req.file.buffer);
+    } else if (company === COMPANIES.ELECTRONICS) {
+      rows = await parseElectronicsInventoryExcel(req.file.buffer);
     } else {
       rows = await parseAccessibleInventoryExcel(req.file.buffer);
     }
@@ -528,7 +617,9 @@ router.post(
       return res.status(400).json({
         message:
           company === COMPANIES.TRIFONE
-            ? "No Trifone products found. Use the stock register with ITEM NAME and August columns."
+            ? "No Trifone Gadgets products found. Use the stock register with ITEM NAME and August columns."
+            : company === COMPANIES.ELECTRONICS
+              ? "No Trifone Electronics products found. Use the Inventory Movement sheet with product names across the top and a CLOSING BALANCE AS AT JULY row."
             : "No products found. Use BookName plus location columns HO, AK, AB, ED, LA, KA, US, AN, ANX.",
       });
     }
@@ -574,9 +665,15 @@ router.delete(
       );
 
       return res.json({
-        message: `Column "${field.label}" removed from the Trifone catalog.`,
+        message: `Column "${field.label}" removed from the Trifone Gadgets catalog.`,
         column: columnKey,
         company,
+      });
+    }
+
+    if (company === COMPANIES.ELECTRONICS) {
+      return res.status(400).json({
+        message: "The Current Stock column cannot be removed from the Trifone Electronics catalog.",
       });
     }
 

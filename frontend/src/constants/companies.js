@@ -8,10 +8,19 @@ export const COMPANY_OPTIONS = [
   },
   {
     id: "trifone",
-    label: "Trifone",
-    shortLabel: "Trifone",
+    label: "Trifone Gadgets",
+    shortLabel: "Trifone Gadgets",
+  },
+  {
+    id: "electronics",
+    label: "Trifone Electronics",
+    shortLabel: "Trifone Electronics",
   },
 ];
+
+export function isLocationlessCompany(id) {
+  return id === "trifone" || id === "electronics";
+}
 
 export function companyLabel(id, { short = false } = {}) {
   const company = COMPANY_OPTIONS.find((item) => item.id === id);

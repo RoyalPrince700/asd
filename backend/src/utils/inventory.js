@@ -9,6 +9,8 @@ const {
   TRIFONE_FIELD_LOOKUP,
   emptyAccessibleStock,
   emptyTrifoneData,
+  emptyElectronicsData,
+  isLocationlessCompany,
 } = require("../constants/companies");
 
 const NAME_HEADERS = [
@@ -227,7 +229,7 @@ async function parseTrifoneInventoryExcel(buffer) {
 
   const headerRowNumber = findTrifoneHeaderRow(sheet);
   if (!headerRowNumber) {
-    throw new Error('No "ITEM NAME" header row found in the Trifone register.');
+    throw new Error('No "ITEM NAME" header row found in the Trifone Gadgets register.');
   }
 
   const headerRow = sheet.getRow(headerRowNumber);
@@ -279,17 +281,199 @@ async function parseTrifoneInventoryExcel(buffer) {
   return rows;
 }
 
+const ELECTRONICS_META_HEADERS =
+  /^(s\/?n|s\.?\s*n\.?|serial(\s*(no\.?|number)?)?|date|details|particulars|description|#)$/i;
+const ELECTRONICS_TITLE_SKIP =
+  /best\s*technology|inventory\s*movement|^goods$|company\s*name/i;
+const ELECTRONICS_CLOSING = /closing\s*balance/i;
+
+function isElectronicsMetaLabel(text) {
+  return ELECTRONICS_META_HEADERS.test(String(text || "").trim());
+}
+
+function looksLikeElectronicsProductName(text) {
+  const value = cellText(text);
+  if (!value) return false;
+  if (isElectronicsMetaLabel(value)) return false;
+  if (ELECTRONICS_TITLE_SKIP.test(value)) return false;
+  if (/^opening\s*inventory$/i.test(value)) return false;
+  if (ELECTRONICS_CLOSING.test(value)) return false;
+  if (!/[a-z]/i.test(value)) return false;
+  if (/^\d{1,2}[\/\-]\d{1,2}([\/\-]\d{2,4})?$/.test(value)) return false;
+  return true;
+}
+
+function parseAccountingCount(value) {
+  if (value == null || value === "") return 0;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Math.round(value) : 0;
+  }
+  if (typeof value === "object") {
+    if (value.result != null) return parseAccountingCount(value.result);
+    if (typeof value.text === "string") return parseAccountingCount(value.text);
+  }
+
+  const text = cellText(value);
+  if (!text || text === "-") return 0;
+  const trimmed = text.trim();
+  const negative = /^\(.*\)$/.test(trimmed);
+  const n = Number(trimmed.replace(/[(),]/g, "").replace(/,/g, "").trim());
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(negative ? -Math.abs(n) : n);
+}
+
+function parseElectronicsStock(value) {
+  return Math.max(0, parseAccountingCount(value));
+}
+
+function electronicsCellHasValue(value) {
+  if (value == null || value === "") return false;
+  if (typeof value === "number") return Number.isFinite(value);
+  const text = cellText(value);
+  if (!text || text === "-") return false;
+  return true;
+}
+
+function findElectronicsSheet(workbook) {
+  return (
+    workbook.worksheets.find((sheet) => /inventory\s*movement/i.test(sheet.name)) ||
+    workbook.worksheets.find((sheet) => /inventory/i.test(sheet.name)) ||
+    workbook.worksheets[0]
+  );
+}
+
+function collectRowTexts(row) {
+  const texts = [];
+  row.eachCell({ includeEmpty: false }, (cell) => {
+    const text = cellText(cell.value);
+    if (text) texts.push(text);
+  });
+  return texts;
+}
+
+function findElectronicsProductHeader(sheet) {
+  const maxScan = Math.min(Math.max(sheet.rowCount || 1, 1), 40);
+  let best = null;
+
+  for (let rowNumber = 1; rowNumber <= maxScan; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    const productCols = [];
+    let metaHits = 0;
+
+    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      const text = cellText(cell.value);
+      if (!text) return;
+      if (isElectronicsMetaLabel(text)) {
+        metaHits += 1;
+        return;
+      }
+      if (looksLikeElectronicsProductName(text)) {
+        productCols.push({ colNumber, name: text.replace(/\s+/g, " ").trim() });
+      }
+    });
+
+    if (productCols.length < 2) continue;
+
+    const score = productCols.length * 10 + metaHits * 8;
+    if (!best || score > best.score) {
+      best = { rowNumber, productCols, score };
+    }
+  }
+
+  if (!best) {
+    throw new Error(
+      "No product name row found. Put product names across the top (Juice Extractor, Digital 10L Air Fryer, etc.)."
+    );
+  }
+
+  return best;
+}
+
+function findElectronicsClosingRow(sheet, headerRowNumber, productCols) {
+  const lastRow = sheet.actualRowCount || sheet.rowCount || sheet.lastRow?.number || 1;
+  let lastNumericRow = null;
+  let closingJuly = null;
+  let closingAny = null;
+
+  for (let rowNumber = lastRow; rowNumber > headerRowNumber; rowNumber -= 1) {
+    const row = sheet.getRow(rowNumber);
+    const rowText = collectRowTexts(row).join(" ");
+    const hasProductValues = productCols.some(({ colNumber }) =>
+      electronicsCellHasValue(row.getCell(colNumber).value)
+    );
+
+    if (!hasProductValues && !ELECTRONICS_CLOSING.test(rowText)) continue;
+
+    if (ELECTRONICS_CLOSING.test(rowText) && /july/i.test(rowText)) {
+      closingJuly = rowNumber;
+      break;
+    }
+    if (ELECTRONICS_CLOSING.test(rowText) && !closingAny) {
+      closingAny = rowNumber;
+    }
+    if (hasProductValues && !lastNumericRow) {
+      lastNumericRow = rowNumber;
+    }
+  }
+
+  const rowNumber = closingJuly || closingAny || lastNumericRow;
+  if (!rowNumber) {
+    throw new Error(
+      'No closing balance row found. The last row should be "CLOSING BALANCE AS AT JULY".'
+    );
+  }
+
+  return rowNumber;
+}
+
+async function parseElectronicsInventoryExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const sheet = findElectronicsSheet(workbook);
+  if (!sheet) {
+    throw new Error("The Excel file has no worksheets.");
+  }
+
+  const { rowNumber: headerRowNumber, productCols } = findElectronicsProductHeader(sheet);
+  const closingRowNumber = findElectronicsClosingRow(sheet, headerRowNumber, productCols);
+  const closingRow = sheet.getRow(closingRowNumber);
+
+  const seen = new Set();
+  const rows = [];
+
+  for (const { colNumber, name } of productCols) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    rows.push({
+      name,
+      electronicsData: {
+        currentStock: parseElectronicsStock(closingRow.getCell(colNumber).value),
+      },
+    });
+  }
+
+  if (!rows.length) {
+    throw new Error("No Trifone Electronics products found in the Inventory Movement sheet.");
+  }
+
+  return rows;
+}
+
 async function buildMovementMap(company, location = null) {
   const match = { company };
   if (location) {
     match.location = location;
-  } else if (company === COMPANIES.TRIFONE) {
+  } else if (isLocationlessCompany(company)) {
     match.$or = [{ location: null }, { location: { $exists: false } }];
   }
 
-  const groupId = location
-    ? "$productName"
-    : { productName: "$productName", location: "$location" };
+  const groupId =
+    location || isLocationlessCompany(company)
+      ? "$productName"
+      : { productName: "$productName", location: "$location" };
 
   const rows = await StockRecord.aggregate([
     { $match: match },
@@ -312,7 +496,7 @@ async function buildMovementMap(company, location = null) {
   for (const row of rows) {
     if (location) {
       map.set(row._id, row.net);
-    } else if (company === COMPANIES.TRIFONE) {
+    } else if (isLocationlessCompany(company)) {
       map.set(row._id, row.net);
     } else {
       const loc = row._id.location || "";
@@ -344,18 +528,39 @@ function liveLocationBalance(product, location, movementMap) {
   return Math.max(0, base + net);
 }
 
-function liveTrifoneBalance(product, movementMap) {
-  const trifoneObj = product.trifoneData?.toObject?.() || product.trifoneData || emptyTrifoneData();
-  const base = Number(trifoneObj.currentStock) || 0;
+function catalogBaseStock(product) {
+  if (product.company === COMPANIES.ELECTRONICS) {
+    const data =
+      product.electronicsData?.toObject?.() ||
+      product.electronicsData ||
+      emptyElectronicsData();
+    return Number(data.currentStock) || 0;
+  }
+
+  if (product.company === COMPANIES.TRIFONE) {
+    const trifoneObj =
+      product.trifoneData?.toObject?.() || product.trifoneData || emptyTrifoneData();
+    return Number(trifoneObj.currentStock) || 0;
+  }
+
+  return 0;
+}
+
+function liveLocationlessBalance(product, movementMap) {
+  const base = catalogBaseStock(product);
   const net = movementMap.get(product.name) || 0;
   return Math.max(0, base + net);
+}
+
+function liveTrifoneBalance(product, movementMap) {
+  return liveLocationlessBalance(product, movementMap);
 }
 
 async function getCurrentStock(productName, company, excludeRecordId = null, location = null) {
   const match = { productName, company };
   if (location) {
     match.location = location;
-  } else if (company === COMPANIES.TRIFONE) {
+  } else if (isLocationlessCompany(company)) {
     match.$or = [{ location: null }, { location: { $exists: false } }];
   }
   if (excludeRecordId) {
@@ -381,15 +586,14 @@ async function getCurrentStock(productName, company, excludeRecordId = null, loc
 
   let baseStock = 0;
   const product = await Product.findOne({ name: productName, company }).select(
-    "stock trifoneData"
+    "stock trifoneData electronicsData company"
   );
 
   if (location && product?.stock) {
     const stockObj = product.stock.toObject?.() || product.stock;
     baseStock = Number(stockObj[location]) || 0;
-  } else if (company === COMPANIES.TRIFONE && product?.trifoneData) {
-    const trifoneObj = product.trifoneData.toObject?.() || product.trifoneData;
-    baseStock = Number(trifoneObj.currentStock) || 0;
+  } else if (isLocationlessCompany(company) && product) {
+    baseStock = catalogBaseStock(product);
   }
 
   return Math.max(0, baseStock + (movement?.net || 0));
@@ -413,10 +617,12 @@ module.exports = {
   parseProductNamesExcel,
   parseAccessibleInventoryExcel,
   parseTrifoneInventoryExcel,
+  parseElectronicsInventoryExcel,
   getCurrentStock,
   buildStockSnapshot,
   buildMovementMap,
   liveAccessibleStock,
   liveLocationBalance,
   liveTrifoneBalance,
+  liveLocationlessBalance,
 };

@@ -13,7 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api";
-import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel } from "../constants/companies";
+import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel, isLocationlessCompany } from "../constants/companies";
 
 function fmt(value) {
   return Number(value || 0).toLocaleString("en-US", {
@@ -140,6 +140,7 @@ export function CfoHome() {
                 ...p,
                 company: e.target.value,
                 productName: "",
+                location: isLocationlessCompany(e.target.value) ? "" : p.location,
               }))
             }
           >
@@ -167,6 +168,7 @@ export function CfoHome() {
             ))}
           </select>
         </label>
+        {!isLocationlessCompany(filters.company) ? (
         <label>
           Location
           <select
@@ -183,6 +185,7 @@ export function CfoHome() {
             ))}
           </select>
         </label>
+        ) : null}
         <label>
           From
           <input
@@ -213,7 +216,7 @@ export function CfoHome() {
         <Kpi
           label="Companies"
           value={COMPANY_OPTIONS.length.toLocaleString()}
-          hint="APL and Trifone"
+          hint="APL, Trifone Gadgets, and Trifone Electronics"
         />
         <Kpi label="Opening" value={fmt(t.openingBalance)} />
         <Kpi label="In" value={fmt(t.inbound)} tone="up" />

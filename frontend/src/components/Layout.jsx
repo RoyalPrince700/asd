@@ -16,6 +16,7 @@ import {
 import { useAuth } from "../context/AuthContext.jsx";
 import { roleLabel } from "../utils/role.js";
 import { isAssignedStaff } from "../utils/staff.js";
+import { companyLabel, isLocationlessCompany } from "../constants/companies";
 
 const NAV_BY_ROLE = {
   admin: [{ to: "/admin", label: "Users", icon: Users }],
@@ -97,8 +98,8 @@ export function Layout() {
             <strong>{user.name}</strong>
             <small>
               {roleLabel(user.role)}
-              {user.assignedCompany === "trifone"
-                ? " · Trifone"
+              {isLocationlessCompany(user.assignedCompany)
+                ? ` · ${companyLabel(user.assignedCompany)}`
                 : user.location
                   ? ` · ${user.location}`
                   : ""}

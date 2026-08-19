@@ -8,7 +8,7 @@ const {
   summarizeRecords,
   computeClosingBalance,
 } = require("../utils/stock");
-const { COMPANIES, isValidCompany, ACCESSIBLE_LOCATIONS } = require("../constants/companies");
+const { COMPANIES, isValidCompany, ACCESSIBLE_LOCATIONS, isLocationlessCompany, companyLabel } = require("../constants/companies");
 const { isValidProductName } = require("../utils/products");
 const { getCurrentStock } = require("../utils/inventory");
 const RecordChange = require("../models/RecordChange");
@@ -52,17 +52,17 @@ function buildFilter(query) {
 }
 
 function isAssignedStaff(user) {
-  if (user.assignedCompany === COMPANIES.TRIFONE) return true;
+  if (isLocationlessCompany(user.assignedCompany)) return true;
   if (user.location) return true;
   return false;
 }
 
 function validateAccountantRecordData(data) {
   if (!data.company || !isValidCompany(data.company)) {
-    return "Select APL or Trifone.";
+    return "Select a company.";
   }
 
-  if (data.company === COMPANIES.TRIFONE) {
+  if (isLocationlessCompany(data.company)) {
     data.location = null;
     return null;
   }
@@ -75,9 +75,10 @@ function validateAccountantRecordData(data) {
 }
 
 function applyClerkScope(data, user, existing = null) {
-  if (user.assignedCompany === COMPANIES.TRIFONE) {
-    if (data.company !== COMPANIES.TRIFONE) {
-      return "Your account is assigned to Trifone. You can only post Trifone records.";
+  if (isLocationlessCompany(user.assignedCompany)) {
+    if (data.company !== user.assignedCompany) {
+      const label = companyLabel(user.assignedCompany);
+      return `Your account is assigned to ${label}. You can only post ${label} records.`;
     }
     data.location = null;
   } else if (user.location) {
@@ -101,8 +102,8 @@ router.get("/", asyncHandler(async (req, res) => {
 
   if (req.user.role === "clerk") {
     filter.enteredBy = req.user._id;
-    if (req.user.assignedCompany === COMPANIES.TRIFONE) {
-      filter.company = COMPANIES.TRIFONE;
+    if (isLocationlessCompany(req.user.assignedCompany)) {
+      filter.company = req.user.assignedCompany;
     } else if (req.user.location) {
       filter.company = COMPANIES.ACCESSIBLE;
       filter.location = req.user.location;
@@ -154,14 +155,14 @@ router.get("/", asyncHandler(async (req, res) => {
 
 router.get("/products", asyncHandler(async (req, res) => {
   const filter = {
-    company: { $in: [COMPANIES.ACCESSIBLE, COMPANIES.TRIFONE] },
+    company: { $in: Object.values(COMPANIES) },
   };
 
   if (req.query.company && isValidCompany(req.query.company)) {
     filter.company = String(req.query.company).trim().toLowerCase();
   } else if (req.user.role === "clerk") {
-    if (req.user.assignedCompany === COMPANIES.TRIFONE) {
-      filter.company = COMPANIES.TRIFONE;
+    if (isLocationlessCompany(req.user.assignedCompany)) {
+      filter.company = req.user.assignedCompany;
     } else if (req.user.location) {
       filter.company = COMPANIES.ACCESSIBLE;
     }
@@ -188,8 +189,8 @@ router.get("/my-summary", requireRole("clerk"), asyncHandler(async (req, res) =>
   const filter = buildFilter(req.query);
   filter.enteredBy = req.user._id;
 
-  if (req.user.assignedCompany === COMPANIES.TRIFONE) {
-    filter.company = COMPANIES.TRIFONE;
+  if (isLocationlessCompany(req.user.assignedCompany)) {
+    filter.company = req.user.assignedCompany;
   } else if (req.user.location) {
     filter.company = COMPANIES.ACCESSIBLE;
     filter.location = req.user.location;
@@ -228,7 +229,7 @@ router.post("/", requireRole("clerk", "accountant"), asyncHandler(async (req, re
     scopeError = validateAccountantRecordData(data);
   } else {
     if (!data.company || !isValidCompany(data.company)) {
-      return res.status(400).json({ message: "Select APL or Trifone." });
+      return res.status(400).json({ message: "Select a company." });
     }
     scopeError = applyClerkScope(data, req.user);
   }
@@ -303,7 +304,7 @@ router.put("/:id", requireRole("clerk", "accountant"), asyncHandler(async (req, 
     scopeError = validateAccountantRecordData(data);
   } else {
     if (!data.company || !isValidCompany(data.company)) {
-      return res.status(400).json({ message: "Select APL or Trifone." });
+      return res.status(400).json({ message: "Select a company." });
     }
     scopeError = applyClerkScope(data, req.user, existing);
   }

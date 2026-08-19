@@ -4,6 +4,7 @@ import {
   ACCESSIBLE_LOCATIONS,
   COMPANY_OPTIONS,
   companyLabel,
+  isLocationlessCompany,
 } from "../constants/companies";
 
 const PAGE_SIZE = 50;
@@ -26,8 +27,8 @@ export function AccountantInventory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const isTrifone = company === "trifone";
-  const scopeReady = isTrifone || Boolean(location);
+  const isLocationless = isLocationlessCompany(company);
+  const scopeReady = isLocationless || Boolean(location);
 
   async function loadList(nextPage = page, nextSearch = appliedSearch) {
     if (!scopeReady) return;
@@ -41,7 +42,7 @@ export function AccountantInventory() {
         search: nextSearch,
         company,
       };
-      if (!isTrifone) params.location = location;
+      if (!isLocationless) params.location = location;
 
       const data = await api.myInventory(params);
       setProducts(data.products);
@@ -93,7 +94,7 @@ export function AccountantInventory() {
             ))}
           </select>
         </label>
-        {!isTrifone ? (
+        {!isLocationless ? (
           <label>
             Location
             <select value={location} onChange={(e) => setLocation(e.target.value)}>
@@ -111,7 +112,7 @@ export function AccountantInventory() {
         <div className="section-head">
           <h2>
             {companyLabel(company, { short: true })}
-            {!isTrifone ? ` · ${location}` : ""} — {isTrifone ? "All items" : "All books"}
+            {!isLocationless ? ` · ${location}` : ""} — {isLocationless ? "All items" : "All books"}
           </h2>
           <span>{total.toLocaleString()} products</span>
         </div>
@@ -119,7 +120,7 @@ export function AccountantInventory() {
         <form className="list-toolbar" onSubmit={onSearch}>
           <input
             type="search"
-            placeholder={isTrifone ? "Search items…" : "Search book names…"}
+            placeholder={isLocationless ? "Search items…" : "Search book names…"}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -149,7 +150,7 @@ export function AccountantInventory() {
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>{isTrifone ? "Item Name" : "BookName"}</th>
+                    <th>{isLocationless ? "Item Name" : "BookName"}</th>
                     <th>Opening</th>
                     <th>Balance</th>
                   </tr>

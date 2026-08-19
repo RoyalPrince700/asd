@@ -1,16 +1,19 @@
 const COMPANIES = {
   ACCESSIBLE: "accessible",
   TRIFONE: "trifone",
+  ELECTRONICS: "electronics",
 };
 
 const COMPANY_LABELS = {
   [COMPANIES.ACCESSIBLE]: "Accessible Publishers Limited",
-  [COMPANIES.TRIFONE]: "Trifone",
+  [COMPANIES.TRIFONE]: "Trifone Gadgets",
+  [COMPANIES.ELECTRONICS]: "Trifone Electronics",
 };
 
 const COMPANY_SHORT_LABELS = {
   [COMPANIES.ACCESSIBLE]: "APL",
-  [COMPANIES.TRIFONE]: "Trifone",
+  [COMPANIES.TRIFONE]: "Trifone Gadgets",
+  [COMPANIES.ELECTRONICS]: "Trifone Electronics",
 };
 
 const COMPANY_OPTIONS = [
@@ -21,10 +24,20 @@ const COMPANY_OPTIONS = [
   },
   {
     id: COMPANIES.TRIFONE,
-    label: "Trifone",
-    shortLabel: "Trifone",
+    label: "Trifone Gadgets",
+    shortLabel: "Trifone Gadgets",
+  },
+  {
+    id: COMPANIES.ELECTRONICS,
+    label: "Trifone Electronics",
+    shortLabel: "Trifone Electronics",
   },
 ];
+
+function isLocationlessCompany(value) {
+  const company = String(value || "").trim().toLowerCase();
+  return company === COMPANIES.TRIFONE || company === COMPANIES.ELECTRONICS;
+}
 
 function isValidCompany(value) {
   return Object.values(COMPANIES).includes(String(value || "").trim().toLowerCase());
@@ -152,11 +165,20 @@ function emptyTrifoneData() {
   );
 }
 
+const ELECTRONICS_FIELDS = [
+  { key: "currentStock", label: "Current Stock", type: "count" },
+];
+
+function emptyElectronicsData() {
+  return { currentStock: 0 };
+}
+
 module.exports = {
   COMPANIES,
   COMPANY_LABELS,
   COMPANY_SHORT_LABELS,
   COMPANY_OPTIONS,
+  isLocationlessCompany,
   isValidCompany,
   resolveCompany,
   companyLabel,
@@ -165,6 +187,8 @@ module.exports = {
   TRIFONE_AUGUST_FIELDS,
   TRIFONE_FIELD_LOOKUP,
   TRIFONE_HEADER_PATTERNS,
+  ELECTRONICS_FIELDS,
   emptyAccessibleStock,
   emptyTrifoneData,
+  emptyElectronicsData,
 };

@@ -6,6 +6,7 @@ import {
   ACCESSIBLE_LOCATIONS,
   COMPANY_OPTIONS,
   companyLabel,
+  isLocationlessCompany,
 } from "../constants/companies";
 
 const emptyForm = {
@@ -40,8 +41,8 @@ export function AccountantMovement() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const isTrifone = company === "trifone";
-  const scopeReady = isTrifone || Boolean(location);
+  const isLocationless = isLocationlessCompany(company);
+  const scopeReady = isLocationless || Boolean(location);
 
   const closing = useMemo(
     () => openingBalance + n(form.inbound) - n(form.outbound),
@@ -59,7 +60,7 @@ export function AccountantMovement() {
   async function loadRecords() {
     if (!scopeReady) return;
     const params = { company };
-    if (!isTrifone) params.location = location;
+    if (!isLocationless) params.location = location;
     const data = await api.records(params);
     setRecords(data.records);
   }
@@ -87,11 +88,11 @@ export function AccountantMovement() {
         form.productName,
         company,
         editingId,
-        isTrifone ? undefined : location
+        isLocationless ? undefined : location
       )
       .then((data) => setOpeningBalance(data.openingBalance))
       .catch((err) => setError(err.message));
-  }, [form.productName, company, location, editingId, isTrifone, scopeReady]);
+  }, [form.productName, company, location, editingId, isLocationless, scopeReady]);
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -119,7 +120,7 @@ export function AccountantMovement() {
         stockReceived: 0,
         stockOut: 0,
       };
-      if (!isTrifone) payload.location = location;
+      if (!isLocationless) payload.location = location;
 
       if (editingId) {
         const result = await api.updateRecord(editingId, payload);
@@ -214,7 +215,7 @@ export function AccountantMovement() {
               ))}
             </select>
           </label>
-          {!isTrifone ? (
+          {!isLocationless ? (
             <label>
               Location
               <select
@@ -245,12 +246,12 @@ export function AccountantMovement() {
 
         <div className="grid-3">
           <label>
-            {isTrifone ? "Item" : "Product"}
+            {isLocationless ? "Item" : "Product"}
             <SearchableSelect
               options={productOptions}
               value={form.productName}
               onChange={(name) => setField("productName", name)}
-              placeholder={isTrifone ? "Search items…" : "Search books…"}
+              placeholder={isLocationless ? "Search items…" : "Search books…"}
               required
             />
           </label>
@@ -314,7 +315,7 @@ export function AccountantMovement() {
         <div className="section-head">
           <h2>
             {companyLabel(company, { short: true })}
-            {!isTrifone ? ` · ${location}` : ""} transactions
+            {!isLocationless ? ` · ${location}` : ""} transactions
           </h2>
           <span>{records.length} records</span>
         </div>
@@ -323,7 +324,7 @@ export function AccountantMovement() {
             <thead>
               <tr>
                 <th>Date</th>
-                <th>{isTrifone ? "Item" : "Product"}</th>
+                <th>{isLocationless ? "Item" : "Product"}</th>
                 <th>Opening</th>
                 <th>In</th>
                 <th>Out</th>

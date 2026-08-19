@@ -105,6 +105,7 @@ export function CfoAnalysis() {
 
   const showApl = !applied.company || applied.company === "accessible";
   const showTrifone = !applied.company || applied.company === "trifone";
+  const showElectronics = !applied.company || applied.company === "electronics";
 
   async function load(params = applied) {
     setLoading(true);
@@ -165,6 +166,7 @@ export function CfoAnalysis() {
 
   const apl = data?.accessible;
   const trf = data?.trifone;
+  const elec = data?.electronics;
 
   return (
     <div className="page">
@@ -173,7 +175,7 @@ export function CfoAnalysis() {
           <p className="eyebrow">Chief Financial Officer</p>
           <h1>Analysis</h1>
           <p className="lede tight">
-            Inventory, revenue, and margin insights across APL and Trifone — drawn from live catalogues and ledger movement.
+            Inventory, revenue, and margin insights across APL, Trifone Gadgets, and Trifone Electronics — drawn from live catalogues and ledger movement.
           </p>
         </div>
         <div className="export-row">
@@ -573,6 +575,49 @@ export function CfoAnalysis() {
             </section>
           ) : null}
 
+          {showElectronics && elec ? (
+            <section className="panel">
+              <div className="section-head">
+                <h2>{companyLabel("electronics")}</h2>
+                <span className="hint">July closing balance — live stock</span>
+              </div>
+              <div className="kpi-grid">
+                <Kpi label="SKUs in catalogue" value={fmt(elec.summary.totalProducts)} />
+                <Kpi
+                  label="Current stock"
+                  value={fmt(elec.summary.totalCurrentStock)}
+                  featured
+                />
+                <Kpi label="Out of stock SKUs" value={fmt(elec.summary.outOfStock)} tone="down" />
+                <Kpi label="Critical stock" value={fmt(elec.summary.criticalStockCount)} />
+                <Kpi label="Low stock" value={fmt(elec.summary.lowStockCount)} />
+              </div>
+              {elec.topProducts?.length ? (
+                <>
+                  <h3 className="subhead">Top SKUs by current stock</h3>
+                  <div className="table-wrap flush">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Current stock</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {elec.topProducts.map((row) => (
+                          <tr key={row.fullName}>
+                            <td>{row.fullName}</td>
+                            <td className="num-strong">{fmt(row.currentStock)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
           {data?.movement?.totals ? (
             <section className="panel">
               <div className="section-head">
@@ -734,7 +779,7 @@ export function CfoAnalysis() {
 
           {showTrifone && trf?.financialOverview?.length ? (
             <article className="panel">
-              <h2>Trifone financial overview</h2>
+              <h2>Trifone Gadgets financial overview</h2>
               <p className="hint">Revenue, inventory value, maintenance & returns</p>
               <div className="chart">
                 <ResponsiveContainer width="100%" height={280}>
@@ -759,7 +804,7 @@ export function CfoAnalysis() {
 
           {showTrifone && trf?.topByUnitsSold?.length ? (
             <article className="panel">
-              <h2>Trifone units sold</h2>
+              <h2>Trifone Gadgets units sold</h2>
               <p className="hint">Top SKUs by volume — with cost of goods</p>
               <div className="chart">
                 <ResponsiveContainer width="100%" height={320}>
@@ -783,7 +828,7 @@ export function CfoAnalysis() {
 
           {showTrifone && trf?.topByMaintenance?.length ? (
             <article className="panel">
-              <h2>Trifone maintenance exposure</h2>
+              <h2>Trifone Gadgets maintenance exposure</h2>
               <p className="hint">Maintenance value by SKU</p>
               <div className="chart">
                 <ResponsiveContainer width="100%" height={280}>
@@ -808,7 +853,7 @@ export function CfoAnalysis() {
 
           {showTrifone && trf?.topByRevenue?.some((row) => row.salesRevenue > 0) ? (
             <article className="panel">
-              <h2>Trifone top revenue SKUs</h2>
+              <h2>Trifone Gadgets top revenue SKUs</h2>
               <p className="hint">August register sales revenue</p>
               <div className="chart">
                 <ResponsiveContainer width="100%" height={320}>
@@ -831,7 +876,7 @@ export function CfoAnalysis() {
 
           {showTrifone && trf?.marginLeaders?.length ? (
             <article className="panel">
-              <h2>Trifone gross margin %</h2>
+              <h2>Trifone Gadgets gross margin %</h2>
               <p className="hint">Best margin performers by SKU</p>
               <div className="chart">
                 <ResponsiveContainer width="100%" height={280}>
@@ -846,6 +891,29 @@ export function CfoAnalysis() {
                     <YAxis tick={{ fontSize: 12 }} unit="%" />
                     <Tooltip formatter={(value) => `${value}%`} />
                     <Bar dataKey="grossMarginPct" name="Margin %" fill="#1f6b4a" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </article>
+          ) : null}
+
+          {showElectronics && elec?.topProducts?.length ? (
+            <article className="panel">
+              <h2>Trifone Electronics stock</h2>
+              <p className="hint">Highest current stock from July closing + live movement</p>
+              <div className="chart">
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={elec.topProducts} layout="vertical" margin={{ left: 8, right: 16 }}>
+                    <CartesianGrid stroke="#e7e0d4" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 12 }} />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={140}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <Tooltip formatter={(value) => fmt(value)} />
+                    <Bar dataKey="currentStock" name="Units" fill="#1f6b4a" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

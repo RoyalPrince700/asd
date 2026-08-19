@@ -1,0 +1,19 @@
+name: Keep Render awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Render health endpoint
+        env:
+          RENDER_URL: ${{ vars.RENDER_URL || 'https://asd-733w.onrender.com' }}
+        run: |
+          curl -fsS --max-time 120 --retry 5 --retry-all-errors --retry-delay 10 \
+            "${RENDER_URL%/}/api/health"
+          echo "Render backend is awake"

@@ -1,6 +1,6 @@
 # Accessible Stock Dashboard
 
-A MERN stock management dashboard for **Accessible Publishers Limited (APL)** and **Trifone**. The CFO uploads product catalogues from Excel, clerks post stock movements by company, and the CFO monitors totals, charts, and downloadable reports.
+A MERN stock management dashboard for **Accessible Publishers Limited (APL)** and **Trifone Gadgets**. The CFO uploads product catalogues from Excel, clerks post stock movements by company, and the CFO monitors totals, charts, and downloadable reports.
 
 ## Features
 
@@ -11,7 +11,7 @@ The CFO manages two separate catalogues from **Product catalog**:
 | Company | Tab | Upload format |
 |---------|-----|---------------|
 | **Accessible Publishers Limited (APL)** | Accessible | `BookName` + location stock counts |
-| **Trifone** | Trifone | Stock register with **August-only** columns |
+| **Trifone Gadgets** | Trifone Gadgets | Stock register with **August-only** columns |
 
 Uploading replaces the full catalogue for that company. Use **Update catalog** to refresh figures from a new month's Excel while keeping products not in the file. A template can be downloaded from the same page.
 
@@ -23,7 +23,7 @@ Uploading replaces the full catalogue for that company. Use **Update catalog** t
 
 Blank cells and `-` are treated as `0`.
 
-#### Trifone catalogue columns
+#### Trifone Gadgets catalogue columns
 
 Upload the full **Stock & Maintenance Operations Register** spreadsheet. The app reads **August data only** and ignores April–July dated columns.
 
@@ -40,13 +40,13 @@ Imported fields include:
 |------|-------|------------------|
 | **Administrator** | `/admin` | View all users, change roles (`clerk`, `cfo`, `admin`), delete users |
 | **CFO** | `/overview`, `/products` | Monitor stock position, filter by company/product/date, download Excel/Word reports, upload and browse product catalogues |
-| **Data clerk** | `/entry` | Post stock in/out for APL or Trifone products from the uploaded catalogue |
+| **Data clerk** | `/entry` | Post stock in/out for APL or Trifone Gadgets products from the uploaded catalogue |
 
 New sign-ups at `/signup` are created as **clerk** by default. An administrator can promote users to CFO or admin.
 
 ### Clerk workflow
 
-1. Select **company** — APL or Trifone
+1. Select **company** — APL or Trifone Gadgets
 2. Select **product** from that company’s uploaded catalogue
 3. Enter **date**, **in**, and **out**
 4. **Opening quantity** is calculated automatically from prior ledger entries for that product and company
@@ -58,7 +58,7 @@ Clerks can edit and delete their own posted records.
 
 - Filter ledger by company, product, and date range
 - KPI cards: products in catalog, companies, opening/in/out/closing totals
-- Charts: daily movement and closing by company (APL vs Trifone)
+- Charts: daily movement and closing by company (APL vs Trifone Gadgets)
 - Full ledger table of all clerk postings
 - Export **Excel** or **Word** reports
 
@@ -77,7 +77,7 @@ Clerks can edit and delete their own posted records.
 cfodashboard/
 ├── backend/
 │   ├── src/
-│   │   ├── constants/companies.js   # APL/Trifone config, locations, Trifone fields
+│   │   ├── constants/companies.js   # APL/Trifone Gadgets config, locations, Trifone Gadgets fields
 │   │   ├── models/                  # User, Product, StockRecord
 │   │   ├── routes/                  # auth, products, records, reports, users
 │   │   ├── utils/                   # Excel parsers, stock calculations, seed
@@ -217,7 +217,7 @@ npm run dev
 
 1. Log in as CFO (or have an admin promote your account)
 2. Go to **Product catalog**
-3. Select **Accessible Publishers Limited** or **Trifone**
+3. Select **Accessible Publishers Limited** or **Trifone Gadgets**
 4. Upload the Excel catalogue (or download the template first)
 5. Confirm the inventory table shows the imported data
 
@@ -225,7 +225,7 @@ npm run dev
 
 1. Log in as clerk
 2. Open **Stock movement dashboard**
-3. Choose **APL** or **Trifone**
+3. Choose **APL** or **Trifone Gadgets**
 4. Select a product, enter in/out quantities, and post
 
 ### Admin user management
@@ -270,4 +270,4 @@ All protected routes require `Authorization: Bearer <token>`.
 
 ## License
 
-Private — internal use for Accessible Publishers Limited and Trifone stock operations.
+Private — internal use for Accessible Publishers Limited and Trifone Gadgets stock operations.

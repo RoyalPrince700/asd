@@ -25,18 +25,18 @@ function applyStaffAssignment(user, assignment) {
     return;
   }
 
-  const normalized = String(assignment).trim();
+  const normalized = String(assignment).trim().toLowerCase();
 
-  if (normalized.toLowerCase() === COMPANIES.TRIFONE) {
-    user.assignedCompany = COMPANIES.TRIFONE;
+  if (isLocationlessCompany(normalized)) {
+    user.assignedCompany = normalized;
     user.location = null;
     return;
   }
 
-  const location = normalized.toUpperCase();
+  const location = String(assignment).trim().toUpperCase();
   if (!ACCESSIBLE_LOCATIONS.includes(location)) {
     throw new Error(
-      `Invalid assignment. Choose Trifone or one of: ${ACCESSIBLE_LOCATIONS.join(", ")}`
+      `Invalid assignment. Choose Trifone Gadgets, Trifone Electronics, or one of: ${ACCESSIBLE_LOCATIONS.join(", ")}`
     );
   }
 
@@ -93,14 +93,16 @@ router.patch(
       if (assignment !== undefined) {
         applyStaffAssignment(user, assignment);
       } else if (assignedCompany !== undefined || location !== undefined) {
-        if (assignedCompany === COMPANIES.TRIFONE || assignedCompany === "trifone") {
-          applyStaffAssignment(user, COMPANIES.TRIFONE);
+        if (isLocationlessCompany(assignedCompany)) {
+          applyStaffAssignment(user, assignedCompany);
         } else if (location) {
           applyStaffAssignment(user, location);
         } else if (!assignedCompany && !location) {
           applyStaffAssignment(user, null);
         } else {
-          return res.status(400).json({ message: "Provide a Trifone assignment or an APL location." });
+          return res.status(400).json({
+            message: "Provide a Trifone Gadgets, Trifone Electronics, or APL location assignment.",
+          });
         }
       } else if (role === undefined) {
         return res.status(400).json({ message: "Assignment or role is required." });

@@ -3,7 +3,7 @@ import { api } from "../api";
 import { SearchableSelect } from "../components/SearchableSelect.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
-import { companyLabel } from "../constants/companies";
+import { companyLabel, isLocationlessCompany } from "../constants/companies";
 import { staffAssignmentLabel, staffCompany } from "../utils/staff.js";
 
 const emptyForm = {
@@ -30,7 +30,7 @@ export function StaffMovement() {
 
   const company = staffCompany(user);
   const assignmentLabel = staffAssignmentLabel(user);
-  const isTrifoneStaff = user?.assignedCompany === "trifone";
+  const isLocationlessStaff = isLocationlessCompany(user?.assignedCompany);
 
   const [form, setForm] = useState(emptyForm);
   const [products, setProducts] = useState([]);
@@ -180,7 +180,7 @@ export function StaffMovement() {
           <h1>Stock movement</h1>
         </div>
         <p className="lede tight">
-          Select a {isTrifoneStaff ? "item" : "book"}, enter In or Out, then post
+          Select a {isLocationlessStaff ? "item" : "book"}, enter In or Out, then post
           the transaction. Edits to existing transactions apply immediately for you
           but are sent to the CFO for approval before they become permanent.
         </p>
@@ -192,7 +192,7 @@ export function StaffMovement() {
             Company
             <input type="text" value={companyLabel(company)} readOnly />
           </label>
-          {!isTrifoneStaff ? (
+          {!isLocationlessStaff ? (
             <label>
               Location
               <input type="text" value={user?.location || ""} readOnly />
@@ -211,12 +211,12 @@ export function StaffMovement() {
 
         <div className="grid-3">
           <label>
-            {isTrifoneStaff ? "Item" : "Product"}
+            {isLocationlessStaff ? "Item" : "Product"}
             <SearchableSelect
               options={productOptions}
               value={form.productName}
               onChange={(name) => setField("productName", name)}
-              placeholder={isTrifoneStaff ? "Search items…" : "Search books…"}
+              placeholder={isLocationlessStaff ? "Search items…" : "Search books…"}
               required
             />
           </label>
@@ -283,7 +283,7 @@ export function StaffMovement() {
             <thead>
               <tr>
                 <th>Date</th>
-                <th>{isTrifoneStaff ? "Item" : "Product"}</th>
+                <th>{isLocationlessStaff ? "Item" : "Product"}</th>
                 <th>Opening</th>
                 <th>In</th>
                 <th>Out</th>

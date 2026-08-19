@@ -30,7 +30,7 @@ export function WaitingForAssignment() {
         </p>
         <ul className="waiting-steps">
           <li>Your account has been created successfully</li>
-          <li>CFO will assign you to Trifone or an APL location</li>
+          <li>CFO will assign you to Trifone Gadgets, Trifone Electronics, or an APL location</li>
           <li>You will then be able to post stock movements and view inventory</li>
         </ul>
         <p className="hint waiting-note">

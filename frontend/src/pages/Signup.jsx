@@ -94,7 +94,7 @@ export function Signup() {
       <aside className="login-aside">
         <blockquote>
           New accounts start as data clerks. You will see a waiting page until a
-          CFO assigns you to Trifone or an APL location.
+          CFO assigns you to Trifone Gadgets, Trifone Electronics, or an APL location.
         </blockquote>
         <ul>
           <li>Work email and password</li>

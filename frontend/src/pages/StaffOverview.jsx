@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext.jsx";
-import { companyLabel } from "../constants/companies";
+import { companyLabel, isLocationlessCompany } from "../constants/companies";
 import { staffAssignmentLabel, staffCompany } from "../utils/staff.js";
 
 function fmt(value) {
@@ -40,7 +40,7 @@ export function StaffOverview() {
   const { user } = useAuth();
   const assignmentLabel = staffAssignmentLabel(user);
   const company = staffCompany(user);
-  const isTrifoneStaff = user?.assignedCompany === "trifone";
+  const isLocationlessStaff = isLocationlessCompany(user?.assignedCompany);
 
   const [filters, setFilters] = useState({
     productName: "",
@@ -94,14 +94,14 @@ export function StaffOverview() {
         </div>
         <p className="lede tight">
           Summary for {companyLabel(company)}
-          {!isTrifoneStaff ? ` · location ${assignmentLabel}` : ""}. Tracks
+          {!isLocationlessStaff ? ` · location ${assignmentLabel}` : ""}. Tracks
           your posted transactions and movement trends.
         </p>
       </header>
 
       <form className="filter-bar" onSubmit={applyFilters}>
         <label>
-          {isTrifoneStaff ? "Item" : "Product"}
+          {isLocationlessStaff ? "Item" : "Product"}
           <select
             value={filters.productName}
             onChange={(e) =>
@@ -235,7 +235,7 @@ export function StaffOverview() {
             <thead>
               <tr>
                 <th>Date</th>
-                <th>{isTrifoneStaff ? "Item" : "Product"}</th>
+                <th>{isLocationlessStaff ? "Item" : "Product"}</th>
                 <th>In</th>
                 <th>Out</th>
                 <th>Closing</th>

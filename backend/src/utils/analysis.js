@@ -7,7 +7,7 @@ const {
   emptyAccessibleStock,
   emptyTrifoneData,
 } = require("../constants/companies");
-const { buildMovementMap, liveAccessibleStock, liveTrifoneBalance } = require("./inventory");
+const { buildMovementMap, liveAccessibleStock, liveTrifoneBalance, liveLocationlessBalance } = require("./inventory");
 const { summarizeRecords } = require("./stock");
 
 function fmtNum(value, decimals = 0) {
@@ -519,12 +519,86 @@ function analyzeTrifoneProducts(products, movementMap) {
   };
 }
 
-function buildMarkdown({ accessible, trifone, movement, generatedAt, companyFilter }) {
+function analyzeElectronicsProducts(products, movementMap, records = []) {
+  const movementByProduct = new Map();
+  for (const record of records) {
+    const current = movementByProduct.get(record.productName) || {
+      inbound: 0,
+      outbound: 0,
+    };
+    current.inbound += (record.inbound || 0) + (record.stockReceived || 0);
+    current.outbound += (record.outbound || 0) + (record.stockOut || 0);
+    movementByProduct.set(record.productName, current);
+  }
+
+  const productRows = [];
+  let totalCurrentStock = 0;
+  let outOfStock = 0;
+  let criticalStockCount = 0;
+  let lowStockCount = 0;
+
+  for (const product of products) {
+    const currentStock = liveLocationlessBalance(product, movementMap);
+    const movement = movementByProduct.get(product.name) || { inbound: 0, outbound: 0 };
+    totalCurrentStock += currentStock;
+    const status = stockStatus(currentStock);
+    if (status === "outOfStock") outOfStock += 1;
+    if (status === "critical") criticalStockCount += 1;
+    if (status === "low") lowStockCount += 1;
+
+    productRows.push({
+      name: product.name,
+      currentStock,
+      inbound: movement.inbound,
+      outbound: movement.outbound,
+      status,
+    });
+  }
+
+  productRows.sort((a, b) => b.currentStock - a.currentStock);
+
+  return {
+    summary: {
+      totalProducts: products.length,
+      totalCurrentStock,
+      outOfStock,
+      criticalStockCount,
+      lowStockCount,
+    },
+    topProducts: productRows.slice(0, 10).map((row) => ({
+      name: truncateName(row.name),
+      fullName: row.name,
+      currentStock: row.currentStock,
+    })),
+    criticalStock: productRows
+      .filter((row) => row.status === "critical")
+      .slice(0, 12)
+      .map((row) => ({
+        name: row.name,
+        currentStock: row.currentStock,
+        outbound: row.outbound,
+      })),
+    lowStock: productRows
+      .filter((row) => row.status === "low")
+      .slice(0, 12)
+      .map((row) => ({
+        name: row.name,
+        currentStock: row.currentStock,
+        outbound: row.outbound,
+      })),
+    outOfStockItems: productRows
+      .filter((row) => row.status === "outOfStock")
+      .slice(0, 15)
+      .map((row) => ({ name: row.name })),
+  };
+}
+
+function buildMarkdown({ accessible, trifone, electronics, movement, generatedAt, companyFilter }) {
   const lines = [];
   const stamp = generatedAt.slice(0, 10);
   const scope =
     companyFilter === "all"
-      ? "Group (APL + Trifone)"
+      ? "Group (APL + Trifone Gadgets + Trifone Electronics)"
       : companyLabel(companyFilter, { short: true });
 
   lines.push(`# CFO Financial Analysis — ${scope}`);
@@ -568,6 +642,18 @@ function buildMarkdown({ accessible, trifone, movement, generatedAt, companyFilt
     lines.push(`- **Units sold:** ${fmtNum(trf.totalUnitsSold)} | **Current stock:** ${fmtNum(trf.totalCurrentStock)}`);
     lines.push(`- **Cost of goods sold:** ${fmtMoney(trf.totalCostOfGoods)}`);
     lines.push(`- **Out of stock SKUs:** ${fmtNum(trf.outOfStock)}`);
+    lines.push("");
+  }
+
+  if (!companyFilter || companyFilter === "all" || companyFilter === COMPANIES.ELECTRONICS) {
+    const elec = electronics.summary;
+    lines.push(`### ${companyLabel(COMPANIES.ELECTRONICS)}`);
+    lines.push("");
+    lines.push(`- **Catalogue size:** ${fmtNum(elec.totalProducts)} appliance SKUs`);
+    lines.push(`- **Current stock (July closing + live movement):** ${fmtNum(elec.totalCurrentStock)}`);
+    lines.push(`- **Out of stock SKUs:** ${fmtNum(elec.outOfStock)}`);
+    lines.push(`- **Critical stock (1–5 units):** ${fmtNum(elec.criticalStockCount)} SKUs`);
+    lines.push(`- **Low stock (6–20 units):** ${fmtNum(elec.lowStockCount)} SKUs`);
     lines.push("");
   }
 
@@ -720,6 +806,35 @@ function buildMarkdown({ accessible, trifone, movement, generatedAt, companyFilt
     }
   }
 
+  if (!companyFilter || companyFilter === "all" || companyFilter === COMPANIES.ELECTRONICS) {
+    lines.push(`## ${companyLabel(COMPANIES.ELECTRONICS)} — inventory`);
+    lines.push("");
+    if (electronics.topProducts.length) {
+      lines.push("### Top SKUs by current stock");
+      lines.push("");
+      for (const row of electronics.topProducts.slice(0, 8)) {
+        lines.push(`- **${row.fullName}** — ${fmtNum(row.currentStock)} units`);
+      }
+      lines.push("");
+    }
+    if (electronics.criticalStock.length) {
+      lines.push("### Critical stock (1–5 units)");
+      lines.push("");
+      for (const row of electronics.criticalStock) {
+        lines.push(`- **${row.name}** — ${fmtNum(row.currentStock)} units`);
+      }
+      lines.push("");
+    }
+    if (electronics.outOfStockItems.length) {
+      lines.push("### Out-of-stock SKUs");
+      lines.push("");
+      for (const row of electronics.outOfStockItems) {
+        lines.push(`- ${row.name}`);
+      }
+      lines.push("");
+    }
+  }
+
   lines.push("---");
   lines.push("_Generated by Accessible Stock Dashboard CFO Analysis._");
 
@@ -745,25 +860,35 @@ async function buildAnalysis(query = {}) {
     recordFilter.company = companyFilter;
   }
 
-  const [aplProducts, trifoneProducts, records] = await Promise.all([
+  const [aplProducts, trifoneProducts, electronicsProducts, records] = await Promise.all([
     companyFilter === "all" || companyFilter === COMPANIES.ACCESSIBLE
       ? Product.find({ company: COMPANIES.ACCESSIBLE }).sort({ name: 1 })
       : [],
     companyFilter === "all" || companyFilter === COMPANIES.TRIFONE
       ? Product.find({ company: COMPANIES.TRIFONE }).sort({ name: 1 })
       : [],
+    companyFilter === "all" || companyFilter === COMPANIES.ELECTRONICS
+      ? Product.find({ company: COMPANIES.ELECTRONICS }).sort({ name: 1 })
+      : [],
     StockRecord.find(recordFilter).sort({ date: -1 }),
   ]);
 
-  const [aplMovementMap, trifoneMovementMap] = await Promise.all([
+  const [aplMovementMap, trifoneMovementMap, electronicsMovementMap] = await Promise.all([
     aplProducts.length ? buildMovementMap(COMPANIES.ACCESSIBLE) : new Map(),
     trifoneProducts.length ? buildMovementMap(COMPANIES.TRIFONE) : new Map(),
+    electronicsProducts.length ? buildMovementMap(COMPANIES.ELECTRONICS) : new Map(),
   ]);
 
   const aplRecords = records.filter((row) => row.company === COMPANIES.ACCESSIBLE);
+  const electronicsRecords = records.filter((row) => row.company === COMPANIES.ELECTRONICS);
 
   const accessible = analyzeAccessibleProducts(aplProducts, aplMovementMap, aplRecords);
   const trifone = analyzeTrifoneProducts(trifoneProducts, trifoneMovementMap);
+  const electronics = analyzeElectronicsProducts(
+    electronicsProducts,
+    electronicsMovementMap,
+    electronicsRecords
+  );
   const movement = summarizeRecords(records);
 
   const movementByCompany = movement.byCompany.map((row) => ({
@@ -775,6 +900,7 @@ async function buildAnalysis(query = {}) {
   const markdown = buildMarkdown({
     accessible,
     trifone,
+    electronics,
     movement,
     generatedAt,
     companyFilter,
@@ -785,6 +911,7 @@ async function buildAnalysis(query = {}) {
     company: companyFilter,
     accessible,
     trifone,
+    electronics,
     movement: {
       totals: movement.totals,
       byCompany: movementByCompany,

@@ -3,8 +3,6 @@ const {
   COMPANIES,
   ACCESSIBLE_LOCATIONS,
   TRIFONE_AUGUST_FIELDS,
-  emptyAccessibleStock,
-  emptyTrifoneData,
 } = require("../constants/companies");
 
 const stockSchema = new mongoose.Schema(
@@ -26,6 +24,13 @@ const trifoneDataSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const electronicsDataSchema = new mongoose.Schema(
+  {
+    currentStock: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -41,6 +46,10 @@ const productSchema = new mongoose.Schema(
     },
     trifoneData: {
       type: trifoneDataSchema,
+      default: undefined,
+    },
+    electronicsData: {
+      type: electronicsDataSchema,
       default: undefined,
     },
     uploadedBy: {

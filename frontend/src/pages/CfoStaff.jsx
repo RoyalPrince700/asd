@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { ACCESSIBLE_LOCATIONS } from "../constants/companies";
+import { ACCESSIBLE_LOCATIONS, companyLabel, isLocationlessCompany } from "../constants/companies";
 import { roleLabel } from "../utils/role.js";
 
 const STAFF_ROLES = [
@@ -10,7 +10,7 @@ const STAFF_ROLES = [
 
 function assignmentValue(item) {
   if (item.role === "accountant") return "";
-  if (item.assignedCompany === "trifone") return "trifone";
+  if (isLocationlessCompany(item.assignedCompany)) return item.assignedCompany;
   if (item.location) return item.location;
   return "";
 }
@@ -18,7 +18,7 @@ function assignmentValue(item) {
 function assignmentLabel(item) {
   if (item.role === "accountant") return "All locations";
   const value = assignmentValue(item);
-  if (value === "trifone") return "Trifone";
+  if (isLocationlessCompany(value)) return companyLabel(value);
   if (value) return `APL · ${value}`;
   return "";
 }
@@ -68,6 +68,7 @@ export function CfoStaff() {
   const assigned = clerks.filter((item) => assignmentValue(item));
   const pending = clerks.filter((item) => !assignmentValue(item));
   const trifoneCount = clerks.filter((item) => item.assignedCompany === "trifone").length;
+  const electronicsCount = clerks.filter((item) => item.assignedCompany === "electronics").length;
   const aplCount = clerks.filter((item) => item.location).length;
 
   return (
@@ -77,7 +78,7 @@ export function CfoStaff() {
           <p className="eyebrow">Chief Financial Officer</p>
           <h1>Staff management</h1>
           <p className="lede tight">
-            Assign staff to Trifone or an APL location after they sign up. Promote
+            Assign staff to Trifone Gadgets, Trifone Electronics, or an APL location after they sign up. Promote
             a user to <strong>Accountant</strong> so they can update inventory on
             behalf of all clerks across any company and location.
           </p>
@@ -100,8 +101,12 @@ export function CfoStaff() {
           <strong>{accountants.length}</strong>
         </article>
         <article className="kpi">
-          <span>Trifone</span>
+          <span>Trifone Gadgets</span>
           <strong>{trifoneCount}</strong>
+        </article>
+        <article className="kpi">
+          <span>Trifone Electronics</span>
+          <strong>{electronicsCount}</strong>
         </article>
         <article className="kpi">
           <span>APL locations</span>
@@ -165,7 +170,8 @@ export function CfoStaff() {
                           onChange={(e) => updateAssignment(item.id, e.target.value)}
                         >
                           <option value="">Not assigned</option>
-                          <option value="trifone">Trifone</option>
+                          <option value="trifone">Trifone Gadgets</option>
+                          <option value="electronics">Trifone Electronics</option>
                           <optgroup label="APL locations">
                             {ACCESSIBLE_LOCATIONS.map((loc) => (
                               <option key={loc} value={loc}>
@@ -206,7 +212,7 @@ export function CfoStaff() {
         <ol style={{ margin: "0.75rem 0 0", paddingLeft: "1.25rem", lineHeight: 1.7 }}>
           <li>Staff create an account via Sign up (they register as a data clerk).</li>
           <li>
-            Assign <strong>Trifone</strong> for staff who manage the Trifone register,
+            Assign <strong>Trifone Gadgets</strong> or <strong>Trifone Electronics</strong> for those registers,
             or an <strong>APL location</strong> (HO, LA, AK, etc.) for Accessible stock.
           </li>
           <li>

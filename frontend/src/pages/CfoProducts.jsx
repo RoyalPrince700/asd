@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useDialog } from "../context/DialogContext.jsx";
 
@@ -13,7 +13,12 @@ const COMPANIES = [
   },
   {
     id: "trifone",
-    label: "Trifone",
+    label: "Trifone Gadgets",
+    ready: true,
+  },
+  {
+    id: "electronics",
+    label: "Trifone Electronics",
     ready: true,
   },
 ];
@@ -48,12 +53,17 @@ function trifoneFieldLabel(field) {
   return TRIFONE_FIELD_LABELS[field.key] || field.label;
 }
 
+function catalogCacheKey(companyId, searchValue = "") {
+  return `${companyId}::${searchValue}`;
+}
+
 export function CfoProducts() {
   const { confirm, toast } = useDialog();
   const [company, setCompany] = useState("accessible");
   const [products, setProducts] = useState([]);
   const [locations, setLocations] = useState([]);
   const [trifoneFields, setTrifoneFields] = useState([]);
+  const [electronicsFields, setElectronicsFields] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -66,19 +76,70 @@ export function CfoProducts() {
   const [deletingId, setDeletingId] = useState(null);
   const [deletingColumn, setDeletingColumn] = useState(null);
   const [uploadMode, setUploadMode] = useState("update");
+  const [dataCompany, setDataCompany] = useState(null);
   const fileRef = useRef(null);
+  const loadSeqRef = useRef(0);
+  const catalogCacheRef = useRef(new Map());
 
   const activeCompany = COMPANIES.find((item) => item.id === company) || COMPANIES[0];
   const isTrifone = company === "trifone";
+  const isElectronics = company === "electronics";
+  const isItemCatalog = isTrifone || isElectronics;
+  const catalogMatches = dataCompany === company;
 
-  async function loadList(nextPage = page, nextSearch = appliedSearch) {
-    if (!activeCompany.ready) {
-      setProducts([]);
-      setLocations([]);
-      setTrifoneFields([]);
-      setTotal(0);
-      setPage(1);
-      setTotalPages(1);
+  function applyCatalog(snapshot, { asLoading = false } = {}) {
+    setProducts(snapshot.products);
+    setLocations(snapshot.locations);
+    setTrifoneFields(snapshot.trifoneFields);
+    setElectronicsFields(snapshot.electronicsFields);
+    setTotal(snapshot.total);
+    setPage(snapshot.page);
+    setTotalPages(snapshot.totalPages);
+    setDataCompany(snapshot.company);
+    setLoading(asLoading);
+  }
+
+  function showSwitchingState() {
+    setProducts([]);
+    setLocations([]);
+    setTrifoneFields([]);
+    setElectronicsFields([]);
+    setTotal(0);
+    setPage(1);
+    setTotalPages(1);
+    setDataCompany(null);
+    setError("");
+    setLoading(true);
+  }
+
+  function selectCompany(nextCompany) {
+    if (nextCompany === company) return;
+    loadSeqRef.current += 1;
+    setCompany(nextCompany);
+    setSearch("");
+    setAppliedSearch("");
+    setError("");
+    setUploadMode("update");
+    if (fileRef.current) fileRef.current.value = "";
+
+    const cached = catalogCacheRef.current.get(catalogCacheKey(nextCompany, ""));
+    if (cached) {
+      applyCatalog(cached, { asLoading: true });
+    } else {
+      showSwitchingState();
+    }
+  }
+
+  async function loadList(
+    nextCompany = company,
+    nextPage = page,
+    nextSearch = appliedSearch
+  ) {
+    const seq = ++loadSeqRef.current;
+
+    if (!COMPANIES.find((item) => item.id === nextCompany)?.ready) {
+      if (seq !== loadSeqRef.current) return;
+      showSwitchingState();
       setLoading(false);
       return;
     }
@@ -87,35 +148,36 @@ export function CfoProducts() {
     setError("");
     try {
       const data = await api.products({
-        company,
+        company: nextCompany,
         page: nextPage,
         limit: PAGE_SIZE,
         search: nextSearch,
         live: true,
       });
-      setProducts(data.products);
-      setLocations(data.locations || []);
-      setTrifoneFields(data.trifoneFields || []);
-      setTotal(data.total);
-      setPage(data.page);
-      setTotalPages(data.totalPages);
+      if (seq !== loadSeqRef.current) return;
+      const snapshot = {
+        company: nextCompany,
+        products: data.products,
+        locations: data.locations || [],
+        trifoneFields: data.trifoneFields || [],
+        electronicsFields: data.electronicsFields || [],
+        total: data.total,
+        page: data.page,
+        totalPages: data.totalPages,
+      };
+      catalogCacheRef.current.set(catalogCacheKey(nextCompany, nextSearch), snapshot);
+      applyCatalog(snapshot);
     } catch (err) {
+      if (seq !== loadSeqRef.current) return;
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }
 
   useEffect(() => {
-    setPage(1);
-    setAppliedSearch("");
-    setSearch("");
-    loadList(1, "").catch((err) => setError(err.message));
-  }, [company]);
-
-  useEffect(() => {
-    loadList(1, appliedSearch).catch((err) => setError(err.message));
-  }, [appliedSearch]);
+    loadList(company, 1, appliedSearch).catch((err) => setError(err.message));
+  }, [company, appliedSearch]);
 
   function onSearch(e) {
     e.preventDefault();
@@ -146,7 +208,7 @@ export function CfoProducts() {
         title: isReplace ? "Replace catalog" : "Update catalog",
         message: isReplace
           ? `This will delete all ${total.toLocaleString()} existing products for ${activeCompany.label} and replace them with the uploaded file only. Continue?`
-          : `This will update location figures for matching products and add any new ones from the file. Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`,
+          : `This will update stock figures for matching products and add any new ones from the file. Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`,
         confirmLabel: isReplace ? "Replace catalog" : "Update catalog",
         variant: isReplace ? "danger" : "default",
       }))
@@ -163,7 +225,7 @@ export function CfoProducts() {
       setPage(1);
       setAppliedSearch("");
       setSearch("");
-      await loadList(1, "");
+      await loadList(company, 1, "");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -207,7 +269,7 @@ export function CfoProducts() {
       toast({ message: result.message, type: "success" });
       const nextPage =
         products.length === 1 && page > 1 ? page - 1 : page;
-      await loadList(nextPage, appliedSearch);
+      await loadList(company, nextPage, appliedSearch);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -232,7 +294,7 @@ export function CfoProducts() {
     try {
       const result = await api.deleteProductColumn(company, columnKey);
       toast({ message: result.message, type: "success" });
-      await loadList(page, appliedSearch);
+      await loadList(company, page, appliedSearch);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -242,6 +304,9 @@ export function CfoProducts() {
 
   const start = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const end = Math.min(page * PAGE_SIZE, total);
+  const electronicsColumns = electronicsFields.length
+    ? electronicsFields
+    : [{ key: "currentStock", label: "Current Stock", type: "count" }];
 
   return (
     <div className="page">
@@ -252,8 +317,9 @@ export function CfoProducts() {
         </div>
         <p className="lede tight">
           Upload inventory by company. Use <strong>Update catalog</strong> to refresh
-          location figures from a new month&apos;s Excel while keeping products not
-          in the file. Trifone reads August columns only; earlier months are ignored.
+          figures from a new month&apos;s Excel while keeping products not in the file.
+          Trifone Gadgets reads August columns only. Trifone Electronics reads product
+          names from the top row and the <strong>July closing balance</strong> row only.
           Stock counts reflect live balances updated by staff.
         </p>
       </header>
@@ -266,7 +332,7 @@ export function CfoProducts() {
             role="tab"
             aria-selected={company === item.id}
             className={company === item.id ? "company-tab active" : "company-tab"}
-            onClick={() => setCompany(item.id)}
+            onClick={() => selectCompany(item.id)}
           >
             {item.label}
           </button>
@@ -291,6 +357,7 @@ export function CfoProducts() {
             <span>Excel file (.xlsx)</span>
             <input
               ref={fileRef}
+              key={company}
               type="file"
               accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             />
@@ -301,6 +368,13 @@ export function CfoProducts() {
               We read <strong>ITEM NAME</strong> plus August fields only (opening stock,
               restock, current stock, maintenance, sales, and remarks). April–July
               columns are ignored.
+            </p>
+          ) : isElectronics ? (
+            <p className="hint">
+              Upload the <strong>Inventory Movement</strong> workbook. Product names
+              sit across the top (Juice Extractor, Digital 10L Air Fryer, and so on).
+              Earlier movement rows are ignored — only the last{" "}
+              <strong>CLOSING BALANCE AS AT JULY</strong> row is imported as current stock.
             </p>
           ) : (
             <p className="hint">
@@ -352,20 +426,26 @@ export function CfoProducts() {
         </form>
       </section>
 
-      <section className="table-wrap">
+      <section className="table-wrap" key={company}>
         <div className="section-head">
           <h2>{activeCompany.label} inventory</h2>
-          <span>{total.toLocaleString()} products</span>
+          <span>
+            {catalogMatches
+              ? `${total.toLocaleString()} products`
+              : "Loading…"}
+            {catalogMatches && loading ? " · updating" : ""}
+          </span>
         </div>
 
         <form className="list-toolbar" onSubmit={onSearch}>
           <input
             type="search"
-            placeholder={isTrifone ? "Search item names…" : "Search book names…"}
+            placeholder={isItemCatalog ? "Search item names…" : "Search book names…"}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            disabled={!catalogMatches}
           />
-          <button type="submit">Search</button>
+          <button type="submit" disabled={!catalogMatches}>Search</button>
           {appliedSearch ? (
             <button type="button" className="ghost" onClick={clearSearch}>
               Clear
@@ -375,8 +455,34 @@ export function CfoProducts() {
 
         {error ? <p className="alert">{error}</p> : null}
 
-        {loading ? (
-          <p className="hint empty-hint">Loading products…</p>
+        {!catalogMatches ? (
+          <div className="catalog-loading" role="status" aria-live="polite">
+            {error ? (
+              <>
+                <strong>Could not load {activeCompany.label}</strong>
+                <p>
+                  The previous company was not kept on screen. Try again when the
+                  network is ready.
+                </p>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => loadList(company, 1, appliedSearch)}
+                >
+                  Try again
+                </button>
+              </>
+            ) : (
+              <>
+                <Loader2 className="catalog-spinner" size={28} aria-hidden="true" />
+                <strong>Loading {activeCompany.label}</strong>
+                <p>
+                  Waiting for this company&apos;s catalog. The company you just left
+                  stays hidden while the network is slow.
+                </p>
+              </>
+            )}
+          </div>
         ) : products.length ? (
           <>
             <div className="table-scroll wide-table">
@@ -384,7 +490,7 @@ export function CfoProducts() {
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>{isTrifone ? "Item Name" : "BookName"}</th>
+                    <th>{isItemCatalog ? "Item Name" : "BookName"}</th>
                     {isTrifone
                       ? trifoneFields.map((field) => (
                           <th key={field.key}>
@@ -405,6 +511,10 @@ export function CfoProducts() {
                             </span>
                           </th>
                         ))
+                      : isElectronics
+                        ? electronicsColumns.map((field) => (
+                            <th key={field.key}>{field.label}</th>
+                          ))
                       : locations.map((loc) => (
                           <th key={loc}>
                             <span className="col-head">
@@ -422,7 +532,7 @@ export function CfoProducts() {
                             </span>
                           </th>
                         ))}
-                    {!isTrifone ? <th>AllTotal</th> : null}
+                    {!isItemCatalog ? <th>AllTotal</th> : null}
                     <th aria-label="Actions" />
                   </tr>
                 </thead>
@@ -445,12 +555,22 @@ export function CfoProducts() {
                               )}
                             </td>
                           ))
+                        : isElectronics
+                          ? electronicsColumns.map((field) => (
+                              <td key={field.key} className="num-strong">
+                                {formatCellValue(
+                                  product.electronicsData?.[field.key] ??
+                                    product.currentStock,
+                                  field.type
+                                )}
+                              </td>
+                            ))
                         : locations.map((loc) => (
                             <td key={loc}>
                               {Number(product.stock?.[loc] || 0).toLocaleString()}
                             </td>
                           ))}
-                      {!isTrifone ? (
+                      {!isItemCatalog ? (
                         <td className="num-strong">
                           {Number(product.allTotal || 0).toLocaleString()}
                         </td>
@@ -483,7 +603,7 @@ export function CfoProducts() {
                   type="button"
                   className="ghost"
                   disabled={page <= 1 || loading}
-                  onClick={() => loadList(page - 1)}
+                  onClick={() => loadList(company, page - 1, appliedSearch)}
                 >
                   Previous
                 </button>
@@ -494,13 +614,19 @@ export function CfoProducts() {
                   type="button"
                   className="ghost"
                   disabled={page >= totalPages || loading}
-                  onClick={() => loadList(page + 1)}
+                  onClick={() => loadList(company, page + 1, appliedSearch)}
                 >
                   Next
                 </button>
               </div>
             </div>
           </>
+        ) : loading ? (
+          <div className="catalog-loading" role="status" aria-live="polite">
+            <Loader2 className="catalog-spinner" size={28} aria-hidden="true" />
+            <strong>Loading {activeCompany.label}</strong>
+            <p>Fetching this company&apos;s products…</p>
+          </div>
         ) : (
           <p className="hint empty-hint">
             {appliedSearch

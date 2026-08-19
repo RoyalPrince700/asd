@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel } from "../constants/companies";
+import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel, isLocationlessCompany } from "../constants/companies";
 import { enteredByLabel } from "../utils/role.js";
 
 const PAGE_SIZE = 50;
@@ -126,6 +126,7 @@ export function CfoLedger() {
                 ...p,
                 company: e.target.value,
                 productName: "",
+                location: isLocationlessCompany(e.target.value) ? "" : p.location,
               }))
             }
           >
@@ -153,6 +154,7 @@ export function CfoLedger() {
             ))}
           </select>
         </label>
+        {!isLocationlessCompany(filters.company) ? (
         <label>
           Location
           <select
@@ -169,6 +171,7 @@ export function CfoLedger() {
             ))}
           </select>
         </label>
+        ) : null}
         <label>
           From
           <input

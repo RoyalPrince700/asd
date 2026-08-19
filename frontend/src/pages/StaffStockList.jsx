@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext.jsx";
-import { companyLabel } from "../constants/companies";
+import { companyLabel, isLocationlessCompany } from "../constants/companies";
 import { staffAssignmentLabel } from "../utils/staff.js";
 
 const PAGE_SIZE = 50;
@@ -15,7 +15,7 @@ function fmt(value) {
 export function StaffStockList() {
   const { user } = useAuth();
   const assignmentLabel = staffAssignmentLabel(user);
-  const isTrifoneStaff = user?.assignedCompany === "trifone";
+  const isLocationlessStaff = isLocationlessCompany(user?.assignedCompany);
 
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
@@ -67,8 +67,8 @@ export function StaffStockList() {
           <h1>Inventory</h1>
         </div>
         <p className="lede tight">
-          Live stock balances for {isTrifoneStaff ? "Trifone" : companyLabel("accessible")}
-          {!isTrifoneStaff ? ` at location ${assignmentLabel}` : ""}. To change a
+          Live stock balances for {isLocationlessStaff ? assignmentLabel : companyLabel("accessible")}
+          {!isLocationlessStaff ? ` at location ${assignmentLabel}` : ""}. To change a
           balance, go to <strong>Stock movement</strong> and post an In or Out
           transaction.
         </p>
@@ -76,14 +76,14 @@ export function StaffStockList() {
 
       <section className="table-wrap">
         <div className="section-head">
-          <h2>{isTrifoneStaff ? "All items" : "All books"}</h2>
+          <h2>{isLocationlessStaff ? "All items" : "All books"}</h2>
           <span>{total.toLocaleString()} products</span>
         </div>
 
         <form className="list-toolbar" onSubmit={onSearch}>
           <input
             type="search"
-            placeholder={isTrifoneStaff ? "Search items…" : "Search book names…"}
+            placeholder={isLocationlessStaff ? "Search items…" : "Search book names…"}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -113,7 +113,7 @@ export function StaffStockList() {
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>{isTrifoneStaff ? "Item Name" : "BookName"}</th>
+                    <th>{isLocationlessStaff ? "Item Name" : "BookName"}</th>
                     <th>Opening</th>
                     <th>Balance</th>
                   </tr>
