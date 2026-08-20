@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 import { api } from "../api";
 import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel, isLocationlessCompany } from "../constants/companies";
 import { enteredByLabel } from "../utils/role.js";
+import { useDialog } from "../context/DialogContext.jsx";
 
 const PAGE_SIZE = 50;
 
@@ -25,6 +27,7 @@ function filtersFromSearch(searchParams) {
 
 export function CfoLedger() {
   const [searchParams] = useSearchParams();
+  const { confirm, toast } = useDialog();
   const initialFilters = filtersFromSearch(searchParams);
   const [filters, setFilters] = useState(initialFilters);
   const [applied, setApplied] = useState(initialFilters);
@@ -36,6 +39,7 @@ export function CfoLedger() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
   const filteredProducts = useMemo(() => {
     if (!filters.company) return products;
@@ -81,6 +85,30 @@ export function CfoLedger() {
       setError(err.message);
     } finally {
       setDownloading("");
+    }
+  }
+
+  async function remove(row) {
+    const label = row.stockId ? `${row.stockId} (${row.productName})` : row.productName;
+    const ok = await confirm({
+      title: "Delete ledger line",
+      message: `Permanently delete ${label} posted by ${enteredByLabel(row.enteredBy)}? This cannot be undone. Inventory totals re-adjust automatically, but the opening and closing figures already saved on other lines stay as they are.`,
+      confirmLabel: "Delete line",
+      variant: "danger",
+    });
+    if (!ok) return;
+
+    setDeletingId(row._id);
+    setError("");
+    try {
+      await api.deleteRecord(row._id);
+      const nextPage = records.length === 1 && page > 1 ? page - 1 : page;
+      await loadList(nextPage, applied);
+      toast({ message: "Ledger line deleted.", type: "success" });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -229,6 +257,8 @@ export function CfoLedger() {
                     <th>Out</th>
                     <th>Closing</th>
                     <th>Posted by</th>
+                    {/* Delete column disabled. Uncomment with the matching cell below to re-enable. */}
+                    {/* <th aria-label="Actions" /> */}
                   </tr>
                 </thead>
                 <tbody>
@@ -244,6 +274,19 @@ export function CfoLedger() {
                       <td>{fmt(row.outbound)}</td>
                       <td className="num-strong">{fmt(row.closingBalance)}</td>
                       <td>{enteredByLabel(row.enteredBy)}</td>
+                      {/* Delete action disabled. Uncomment with the matching header above to re-enable. */}
+                      {/* <td className="row-actions">
+                        <button
+                          type="button"
+                          className="icon-btn danger"
+                          title={`Delete ${row.stockId || row.productName}`}
+                          aria-label={`Delete ${row.stockId || row.productName}`}
+                          disabled={deletingId === row._id}
+                          onClick={() => remove(row)}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td> */}
                     </tr>
                   ))}
                 </tbody>

@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Clock,
+  Inbox,
   LayoutDashboard,
   LogOut,
   Package,
@@ -18,27 +19,36 @@ import { roleLabel } from "../utils/role.js";
 import { isAssignedStaff } from "../utils/staff.js";
 import { companyLabel, isLocationlessCompany } from "../constants/companies";
 
+const MY_REQUESTS_NAV = { to: "/my-requests", label: "Requests", icon: Inbox };
+
 const NAV_BY_ROLE = {
-  admin: [{ to: "/admin", label: "Users", icon: Users }],
+  admin: [
+    { to: "/admin", label: "Users", icon: Users },
+    MY_REQUESTS_NAV,
+  ],
   cfo: [
     { to: "/overview", label: "Overview", icon: LayoutDashboard },
     { to: "/analysis", label: "Analysis", icon: BarChart3 },
     { to: "/ledger", label: "Ledger lines", icon: ScrollText },
     { to: "/edited-ledger", label: "Edited ledger", icon: ClipboardCheck },
+    { to: "/requests", label: "Request inbox", icon: Inbox },
+    { to: "/my-requests", label: "My requests", icon: ClipboardList },
     { to: "/products", label: "Product catalog", icon: Package },
     { to: "/staff", label: "Staff", icon: Users },
   ],
   accountant: [
     { to: "/accountant/movement", label: "Stock movement", icon: ClipboardList },
     { to: "/accountant/inventory", label: "Inventory", icon: Package },
+    MY_REQUESTS_NAV,
   ],
-  clerk: [{ to: "/entry", label: "Pending assignment", icon: Clock }],
+  clerk: [{ to: "/entry", label: "Pending assignment", icon: Clock }, MY_REQUESTS_NAV],
 };
 
 const ASSIGNED_CLERK_NAV = [
   { to: "/staff/overview", label: "Overview", icon: LayoutDashboard },
   { to: "/entry", label: "Stock movement", icon: ClipboardList },
   { to: "/staff/inventory", label: "Inventory", icon: Package },
+  MY_REQUESTS_NAV,
 ];
 
 export function Layout() {

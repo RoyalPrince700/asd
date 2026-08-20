@@ -316,7 +316,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   height: 42px;
   border: 1px solid var(--line);
   background: #fff;
@@ -324,8 +325,16 @@ select {
   padding: 0 12px;
 }
 
+textarea {
+  height: auto;
+  min-height: 110px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 2px solid #13233733;
   border-color: var(--navy);
 }
@@ -1313,6 +1322,11 @@ input[readonly] {
     grid-template-columns: 1fr;
     display: grid;
   }
+
+  .request-fields-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 .analysis-toolbar {
@@ -1516,5 +1530,41 @@ input[readonly] {
 
 .row-pending {
   background: #fffbf5;
+}
+
+.row-done {
+  opacity: 0.72;
+}
+
+.row-done td {
+  color: var(--muted);
+}
+
+.request-fields-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  margin-top: 14px;
+}
+
+.request-fields-row > label {
+  flex: 1;
+  min-width: 0;
+}
+
+.request-time-note {
+  margin: 10px 0 0;
+}
+
+.inline-link {
+  display: inline;
+  padding: 0;
+  min-height: 0;
+  vertical-align: baseline;
+}
+
+.status-pill--done {
+  background: #e7f5ef;
+  color: var(--up);
 }
 

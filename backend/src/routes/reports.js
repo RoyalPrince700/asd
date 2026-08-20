@@ -455,4 +455,253 @@ router.get("/ledger/docx", asyncHandler(async (req, res) => {
   res.send(buffer);
 }));
 
+router.get("/requests/excel", asyncHandler(async (_req, res) => {
+  const {
+    loadRequestExportRows,
+    summarizeRequestRows,
+    summarizeByCategory,
+    rowToExportRecord,
+    DETAIL_HEADERS,
+    REQUEST_TYPE_IDS,
+    REQUEST_TYPE_LABELS,
+  } = require("../utils/requestExport");
+
+  const rows = await loadRequestExportRows();
+  const summary = summarizeRequestRows(rows);
+  const byCategory = summarizeByCategory(rows);
+  const generatedAt = new Date().toLocaleString();
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Accessible Stock Dashboard";
+  workbook.created = new Date();
+
+  function styleHeaderRow(sheet) {
+    sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    sheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF132337" },
+    };
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+  }
+
+  function addCategoryMatrixSheet(sheetName) {
+    const sheet = workbook.addWorksheet(sheetName);
+    sheet.columns = [
+      { header: "Category", key: "label", width: 22 },
+      { header: "Total", key: "total", width: 10 },
+      { header: "Pending", key: "pending", width: 12 },
+      { header: "Processing", key: "processing", width: 14 },
+      { header: "Completed", key: "completed", width: 14 },
+      { header: "Rejected", key: "rejected", width: 12 },
+      { header: "Active", key: "active", width: 10 },
+    ];
+    styleHeaderRow(sheet);
+    byCategory.forEach((item) => sheet.addRow(item));
+
+    const totals = sheet.addRow({
+      label: "All categories",
+      total: summary.total,
+      pending: summary.pending,
+      processing: summary.processing,
+      completed: summary.completed,
+      rejected: summary.rejected,
+      active: summary.active,
+    });
+    totals.font = { bold: true };
+    sheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: byCategory.length + 1, column: 7 },
+    };
+    return sheet;
+  }
+
+  function addDetailSheet(sheetName, detailRows) {
+    const sheet = workbook.addWorksheet(sheetName);
+    sheet.addRow(DETAIL_HEADERS);
+    styleHeaderRow(sheet);
+    detailRows.forEach((row) => sheet.addRow(rowToExportRecord(row)));
+    sheet.columns = [
+      { width: 20 },
+      { width: 14 },
+      { width: 12 },
+      { width: 24 },
+      { width: 28 },
+      { width: 14 },
+      { width: 14 },
+      { width: 22 },
+      { width: 22 },
+    ];
+    if (detailRows.length) {
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: detailRows.length + 1, column: DETAIL_HEADERS.length },
+      };
+    }
+    return sheet;
+  }
+
+  const summarySheet = workbook.addWorksheet("Summary");
+  summarySheet.getColumn(1).width = 28;
+  summarySheet.getColumn(2).width = 14;
+  summarySheet.addRow(["CFO Requests Report", ""]);
+  summarySheet.addRow(["Generated", generatedAt]);
+  summarySheet.addRow(["", ""]);
+  summarySheet.addRow(["Status overview", "Count"]);
+  summarySheet.getRow(4).font = { bold: true };
+  [
+    ["Total requests", summary.total],
+    ["Pending", summary.pending],
+    ["Processing", summary.processing],
+    ["Completed", summary.completed],
+    ["Rejected", summary.rejected],
+    ["Active (not completed)", summary.active],
+  ].forEach(([metric, count]) => summarySheet.addRow([metric, count]));
+  summarySheet.addRow(["", ""]);
+  const categoryHeaderRow = summarySheet.rowCount + 1;
+  summarySheet.addRow(["Request category", "Total"]);
+  summarySheet.getRow(categoryHeaderRow).font = { bold: true };
+  byCategory.forEach((item) =>
+    summarySheet.addRow([item.label, item.total])
+  );
+
+  addCategoryMatrixSheet("By Category");
+  addDetailSheet("All Requests", rows);
+
+  const activeRows = rows.filter((row) => row.status !== "completed");
+  addDetailSheet("Active Queue", activeRows);
+
+  const completedRows = rows.filter((row) => row.status === "completed");
+  addDetailSheet("Completed", completedRows);
+
+  for (const typeId of REQUEST_TYPE_IDS) {
+    const label = REQUEST_TYPE_LABELS[typeId];
+    const categoryRows = rows.filter((row) => row.categoryId === typeId);
+    if (categoryRows.length) {
+      addDetailSheet(label, categoryRows);
+    }
+  }
+
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="cfo-requests-${stamp()}.xlsx"`
+  );
+  await workbook.xlsx.write(res);
+  res.end();
+}));
+
+router.get("/requests/docx", asyncHandler(async (_req, res) => {
+  const {
+    loadRequestExportRows,
+    summarizeRequestRows,
+    summarizeByCategory,
+  } = require("../utils/requestExport");
+
+  const rows = await loadRequestExportRows();
+  const summary = summarizeRequestRows(rows);
+  const byCategory = summarizeByCategory(rows);
+
+  const header = new TableRow({
+    children: ["Category", "Date / time", "Submitted by", "Status", "Completed at"].map(
+      (label) =>
+        cell(label, { bold: true, color: "FFFFFF", shading: "132337", width: 1800 })
+    ),
+  });
+
+  const bodyRows = rows.map(
+    (row) =>
+      new TableRow({
+        children: [
+          cell(row.requestCategory),
+          cell(row.dateTime),
+          cell(row.submittedBy),
+          cell(row.statusLabel),
+          cell(row.completedAt),
+        ],
+      })
+  );
+
+  const categorySummary = byCategory
+    .map(
+      (item) =>
+        `${item.label} ${item.total} (Pending ${item.pending}, Processing ${item.processing}, Completed ${item.completed}, Rejected ${item.rejected})`
+    )
+    .join("  ·  ");
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            children: [
+              new TextRun({
+                text: "CFO Requests Report",
+                font: "Calibri",
+                bold: true,
+              }),
+            ],
+          }),
+          new Paragraph({
+            spacing: { after: 200 },
+            children: [
+              new TextRun({
+                text: `Generated ${new Date().toLocaleString()} · ${summary.total} requests`,
+                italics: true,
+                size: 20,
+                color: "57534E",
+              }),
+            ],
+          }),
+          new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            children: [new TextRun({ text: "Status summary", bold: true })],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `Pending ${summary.pending}  ·  Processing ${summary.processing}  ·  Completed ${summary.completed}  ·  Rejected ${summary.rejected}  ·  Active ${summary.active}`,
+                size: 22,
+              }),
+            ],
+            spacing: { after: 160 },
+          }),
+          new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            children: [new TextRun({ text: "By request category", bold: true })],
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: categorySummary, size: 22 })],
+            spacing: { after: 280 },
+          }),
+          new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            children: [new TextRun({ text: "All requests", bold: true })],
+          }),
+          new Table({
+            width: { size: 10080, type: WidthType.DXA },
+            rows: [header, ...bodyRows],
+          }),
+        ],
+      },
+    ],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  );
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="cfo-requests-${stamp()}.docx"`
+  );
+  res.send(buffer);
+}));
+
 module.exports = router;

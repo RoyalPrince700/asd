@@ -260,6 +260,30 @@ export const api = {
     a.remove();
     URL.revokeObjectURL(url);
   },
+  requests: (params = {}) => request(`/api/requests${query(params)}`),
+  createRequest: (payload) =>
+    request("/api/requests", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateRequest: (id, payload) =>
+    request(`/api/requests/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteRequest: (id) => request(`/api/requests/${id}`, { method: "DELETE" }),
+  downloadRequestsReport: async (type) => {
+    const blob = await request(`/api/reports/requests/${type}`, { blob: true });
+    const ext = type === "excel" ? "xlsx" : "docx";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cfo-requests.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 };
 
 function query(params) {

@@ -14,6 +14,8 @@ import { CfoProducts } from "./pages/CfoProducts.jsx";
 import { CfoStaff } from "./pages/CfoStaff.jsx";
 import { CfoAnalysis } from "./pages/CfoAnalysis.jsx";
 import { CfoEditedLedger } from "./pages/CfoEditedLedger.jsx";
+import { CfoRequests } from "./pages/CfoRequests.jsx";
+import { MyRequests } from "./pages/MyRequests.jsx";
 import { AdminHome } from "./pages/AdminHome.jsx";
 import { AccountantMovement } from "./pages/AccountantMovement.jsx";
 import { AccountantInventory } from "./pages/AccountantInventory.jsx";
@@ -119,6 +121,18 @@ export default function App() {
             element={
               <ProtectedRoute role="cfo">
                 <CfoAnalysis />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/my-requests"
+            element={<MyRequests />}
+          />
+          <Route
+            path="/requests"
+            element={
+              <ProtectedRoute role="cfo">
+                <CfoRequests />
               </ProtectedRoute>
             }
           />

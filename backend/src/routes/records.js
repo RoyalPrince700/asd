@@ -378,7 +378,7 @@ router.put("/:id", requireRole("clerk", "accountant"), asyncHandler(async (req, 
   });
 }));
 
-router.delete("/:id", requireRole("clerk", "accountant"), asyncHandler(async (req, res) => {
+router.delete("/:id", requireRole("clerk", "accountant", "cfo"), asyncHandler(async (req, res) => {
   const existing = await StockRecord.findById(req.params.id);
 
   if (!existing) {
@@ -390,6 +390,11 @@ router.delete("/:id", requireRole("clerk", "accountant"), asyncHandler(async (re
   }
 
   await existing.deleteOne();
+
+  // Pending edits would otherwise survive as review rows the CFO can neither
+  // approve nor reject, since both paths require the underlying record.
+  await RecordChange.deleteMany({ recordId: existing._id, status: "pending" });
+
   res.json({ message: "Record deleted" });
 }));
 

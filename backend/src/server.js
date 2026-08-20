@@ -11,6 +11,7 @@ const categoryRoutes = require("./routes/categories");
 const staffRoutes = require("./routes/staff");
 const reportRoutes = require("./routes/reports");
 const analysisRoutes = require("./routes/analysis");
+const requestRoutes = require("./routes/requests");
 const { bootstrapAdmin, bootstrapProducts } = require("./utils/seed");
 const { backfillStockIds } = require("./utils/stockId");
 
@@ -43,6 +44,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/staff", staffRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/analysis", analysisRoutes);
+app.use("/api/requests", requestRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
