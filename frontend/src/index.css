@@ -1205,6 +1205,66 @@ input[readonly] {
   border-color: #9a1f16;
 }
 
+.dialog--read {
+  position: relative;
+  width: min(100%, 520px);
+  max-height: min(80vh, 560px);
+  overflow: auto;
+  padding-top: 48px;
+}
+
+.dialog-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.dialog-close:hover {
+  background: #eef2f6;
+  color: var(--ink);
+}
+
+.dialog-body {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.request-details-preview {
+  display: block;
+  max-width: 220px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--navy);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: #13233744;
+  text-underline-offset: 2px;
+}
+
+.request-details-preview:hover {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+
 .toast-stack {
   position: fixed;
   top: 20px;
@@ -1550,6 +1610,20 @@ input[readonly] {
 .request-fields-row > label {
   flex: 1;
   min-width: 0;
+}
+
+.request-type-row {
+  margin-top: 0;
+  align-items: stretch;
+}
+
+.request-details-field {
+  flex: 2;
+}
+
+.request-details-cell {
+  max-width: 240px;
+  font-size: 13px;
 }
 
 .request-time-note {

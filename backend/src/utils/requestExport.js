@@ -101,6 +101,7 @@ function mapRequestRow(doc) {
     categoryId,
     requestCategory: requestTypeLabel(doc.request),
     requestType: requestTypeLabel(doc.request),
+    details: doc.details || "—",
     statusLabel: statusLabel(status),
     date: doc.date || "—",
     time: formatTime12(doc.time),
@@ -117,19 +118,9 @@ function mapRequestRow(doc) {
 
 function sortExportRows(rows) {
   rows.sort((a, b) => {
-    const categoryDiff = a.requestCategory.localeCompare(b.requestCategory);
-    if (categoryDiff !== 0) return categoryDiff;
-
-    const statusDiff = (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
-    if (statusDiff !== 0) return statusDiff;
-
-    if (a.status === "completed") {
-      const aAt = a.doc.completedAt || a.doc.updatedAt || a.doc.createdAt;
-      const bAt = b.doc.completedAt || b.doc.updatedAt || b.doc.createdAt;
-      return new Date(bAt) - new Date(aAt);
-    }
-
-    return sortKey(a.doc).localeCompare(sortKey(b.doc));
+    const aAt = a.doc.createdAt || new Date(0);
+    const bAt = b.doc.createdAt || new Date(0);
+    return new Date(bAt) - new Date(aAt);
   });
 }
 
@@ -179,11 +170,10 @@ function summarizeByCategory(rows) {
 function rowToExportRecord(row) {
   return [
     row.requestCategory,
+    row.details,
+    row.submittedBy,
     row.date,
     row.time,
-    row.submittedBy,
-    row.submitterEmail,
-    row.submitterRole,
     row.statusLabel,
     row.submittedAt,
     row.completedAt,
@@ -191,12 +181,11 @@ function rowToExportRecord(row) {
 }
 
 const DETAIL_HEADERS = [
-  "Category",
+  "Request",
+  "Details",
+  "Submitted by",
   "Date",
   "Time",
-  "Submitted by",
-  "Email",
-  "Role",
   "Status",
   "Submitted at",
   "Completed at",

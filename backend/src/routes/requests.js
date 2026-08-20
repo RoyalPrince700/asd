@@ -19,6 +19,7 @@ function publicRequest(doc) {
   return {
     id: doc._id,
     request: doc.request,
+    details: doc.details || "",
     date: doc.date,
     time: doc.time,
     status,
@@ -81,7 +82,7 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    const { request, date, time } = req.body;
+    const { request, date, time, details } = req.body;
 
     const requestType = String(request || "").trim();
     if (!REQUEST_TYPES.includes(requestType)) {
@@ -100,6 +101,7 @@ router.post(
 
     const doc = await Request.create({
       request: requestType,
+      details: String(details || "").trim(),
       date: requestDate,
       time: requestTime,
       status: "pending",

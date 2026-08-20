@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { RequestDetailsCell } from "../components/RequestDetailsCell.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
 import {
@@ -15,6 +16,7 @@ import { roleLabel } from "../utils/role.js";
 
 const emptyForm = () => ({
   request: "credit",
+  details: "",
   date: currentDateValue(),
   time: currentTimeValue(),
 });
@@ -104,20 +106,32 @@ export function MyRequests() {
       {error ? <p className="alert">{error}</p> : null}
 
       <form className="entry-card" onSubmit={onSubmit}>
-        <label>
-          Request
-          <select
-            value={form.request}
-            onChange={(e) => setField("request", e.target.value)}
-            required
-          >
-            {REQUEST_TYPES.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="request-fields-row request-type-row">
+          <label>
+            Request
+            <select
+              value={form.request}
+              onChange={(e) => setField("request", e.target.value)}
+              required
+            >
+              {REQUEST_TYPES.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="request-details-field">
+            Details
+            <textarea
+              value={form.details}
+              onChange={(e) => setField("details", e.target.value)}
+              placeholder="Add more information about this request…"
+              rows={3}
+            />
+          </label>
+        </div>
 
         <div className="request-fields-row">
           <label>
@@ -181,13 +195,14 @@ export function MyRequests() {
             <tr>
               <th>Date / time</th>
               <th>Request</th>
+              <th>Details</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {requests.length === 0 ? (
               <tr>
-                <td colSpan={3} className="hint">
+                <td colSpan={4} className="hint">
                   No requests yet. Submit your first request above.
                 </td>
               </tr>
@@ -199,6 +214,9 @@ export function MyRequests() {
                 >
                   <td>{formatRequestDateTime(item.date, item.time)}</td>
                   <td>{requestTypeLabel(item.request)}</td>
+                  <td className="request-details-cell">
+                    <RequestDetailsCell details={item.details} />
+                  </td>
                   <td>
                     <span className={requestStatusPill(item.status)}>
                       {requestStatusLabel(item.status)}

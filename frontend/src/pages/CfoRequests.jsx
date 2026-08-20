@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { RequestDetailsCell } from "../components/RequestDetailsCell.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
 import {
   REQUEST_STATUSES,
@@ -178,6 +179,7 @@ export function CfoRequests() {
               <thead>
                 <tr>
                   <th>Request</th>
+                  <th>Details</th>
                   <th>Date / time</th>
                   <th>Submitted by</th>
                   <th>Status</th>
@@ -191,6 +193,12 @@ export function CfoRequests() {
                     className={item.status === "completed" ? "row-done" : ""}
                   >
                     <td>{requestTypeLabel(item.request)}</td>
+                    <td className="request-details-cell">
+                      <RequestDetailsCell
+                        details={item.details}
+                        title={`${requestTypeLabel(item.request)} details`}
+                      />
+                    </td>
                     <td>{formatRequestDateTime(item.date, item.time)}</td>
                     <td>{submitterLabel(item.submittedBy)}</td>
                     <td>

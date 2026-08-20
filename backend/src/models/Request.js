@@ -7,6 +7,7 @@ const requestSchema = new mongoose.Schema(
       enum: ["credit", "expense", "stock_issues"],
       required: true,
     },
+    details: { type: String, default: "", trim: true },
     date: { type: String, required: true, trim: true },
     time: { type: String, required: true, trim: true },
     status: {
