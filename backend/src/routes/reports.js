@@ -470,6 +470,7 @@ router.get("/requests/excel", asyncHandler(async (_req, res) => {
 
   const sheet = workbook.addWorksheet("Requests");
   sheet.columns = [
+    { width: 14 },
     { width: 22 },
     { width: 48 },
     { width: 24 },
@@ -487,8 +488,12 @@ router.get("/requests/excel", asyncHandler(async (_req, res) => {
     pattern: "solid",
     fgColor: { argb: "FF132337" },
   };
+  sheet.getColumn(1).numFmt = "@";
 
-  rows.forEach((row) => sheet.addRow(rowToExportRecord(row)));
+  rows.forEach((row) => {
+    const excelRow = sheet.addRow(rowToExportRecord(row));
+    excelRow.getCell(1).numFmt = "@";
+  });
 
   if (rows.length) {
     sheet.autoFilter = {

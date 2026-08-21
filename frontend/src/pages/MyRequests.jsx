@@ -73,11 +73,17 @@ export function MyRequests() {
     setBusy(true);
     setError("");
     try {
-      await api.createRequest(form);
+      const result = await api.createRequest(form);
       setForm(emptyForm());
       setTimeManual(false);
       await load();
-      toast({ message: "Request submitted to the CFO.", type: "success" });
+      const requestId = result.request?.requestId;
+      toast({
+        message: requestId
+          ? `Request submitted. Request ID ${requestId}.`
+          : "Request submitted to the CFO.",
+        type: "success",
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -193,6 +199,7 @@ export function MyRequests() {
         <table>
           <thead>
             <tr>
+              <th>Request ID</th>
               <th>Date / time</th>
               <th>Request</th>
               <th>Details</th>
@@ -202,7 +209,7 @@ export function MyRequests() {
           <tbody>
             {requests.length === 0 ? (
               <tr>
-                <td colSpan={4} className="hint">
+                <td colSpan={5} className="hint">
                   No requests yet. Submit your first request above.
                 </td>
               </tr>
@@ -212,6 +219,7 @@ export function MyRequests() {
                   key={item.id}
                   className={item.status === "completed" ? "row-done" : ""}
                 >
+                  <td className="stock-id">{item.requestId || "—"}</td>
                   <td>{formatRequestDateTime(item.date, item.time)}</td>
                   <td>{requestTypeLabel(item.request)}</td>
                   <td className="request-details-cell">

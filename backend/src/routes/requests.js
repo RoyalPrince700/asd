@@ -2,6 +2,7 @@ const express = require("express");
 const Request = require("../models/Request");
 const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
+const { nextRequestId } = require("../utils/requestId");
 
 const router = express.Router();
 
@@ -18,6 +19,7 @@ function publicRequest(doc) {
   const status = resolveStatus(doc);
   return {
     id: doc._id,
+    requestId: doc.requestId || "",
     request: doc.request,
     details: doc.details || "",
     date: doc.date,
@@ -100,6 +102,7 @@ router.post(
     }
 
     const doc = await Request.create({
+      requestId: await nextRequestId(),
       request: requestType,
       details: String(details || "").trim(),
       date: requestDate,

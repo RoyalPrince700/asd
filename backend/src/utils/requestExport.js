@@ -99,6 +99,7 @@ function mapRequestRow(doc) {
     doc,
     status,
     categoryId,
+    requestId: doc.requestId || "",
     requestCategory: requestTypeLabel(doc.request),
     requestType: requestTypeLabel(doc.request),
     details: doc.details || "—",
@@ -169,6 +170,7 @@ function summarizeByCategory(rows) {
 
 function rowToExportRecord(row) {
   return [
+    row.requestId,
     row.requestCategory,
     row.details,
     row.submittedBy,
@@ -181,6 +183,7 @@ function rowToExportRecord(row) {
 }
 
 const DETAIL_HEADERS = [
+  "Request ID",
   "Request",
   "Details",
   "Submitted by",

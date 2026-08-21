@@ -2,6 +2,12 @@ const mongoose = require("mongoose");
 
 const requestSchema = new mongoose.Schema(
   {
+    requestId: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
     request: {
       type: String,
       enum: ["credit", "expense", "stock_issues"],

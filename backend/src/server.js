@@ -14,6 +14,7 @@ const analysisRoutes = require("./routes/analysis");
 const requestRoutes = require("./routes/requests");
 const { bootstrapAdmin, bootstrapProducts } = require("./utils/seed");
 const { backfillStockIds } = require("./utils/stockId");
+const { backfillRequestIds } = require("./utils/requestId");
 
 const app = express();
 
@@ -64,6 +65,10 @@ connectDb()
     const stockIds = await backfillStockIds();
     if (stockIds.assigned) {
       console.log(`Assigned stock IDs to ${stockIds.assigned} existing transactions`);
+    }
+    const requestIds = await backfillRequestIds();
+    if (requestIds.assigned) {
+      console.log(`Assigned request IDs to ${requestIds.assigned} existing requests`);
     }
     const server = app.listen(port, host, () => {
       console.log(`API listening on ${host}:${port}`);

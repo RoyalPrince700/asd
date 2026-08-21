@@ -178,6 +178,7 @@ export function CfoRequests() {
             <table>
               <thead>
                 <tr>
+                  <th>Request ID</th>
                   <th>Request</th>
                   <th>Details</th>
                   <th>Date / time</th>
@@ -192,6 +193,7 @@ export function CfoRequests() {
                     key={item.id}
                     className={item.status === "completed" ? "row-done" : ""}
                   >
+                    <td className="stock-id">{item.requestId || "—"}</td>
                     <td>{requestTypeLabel(item.request)}</td>
                     <td className="request-details-cell">
                       <RequestDetailsCell
