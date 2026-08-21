@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import { api } from "../api";
+import { CfoRemarkTag } from "../components/RemarkTag.jsx";
 import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel, isLocationlessCompany } from "../constants/companies";
 import { enteredByLabel } from "../utils/role.js";
 import { useDialog } from "../context/DialogContext.jsx";
@@ -255,6 +256,7 @@ export function CfoLedger() {
                     <th>Opening</th>
                     <th>In</th>
                     <th>Out</th>
+                    <th>Remark</th>
                     <th>Closing</th>
                     <th>Posted by</th>
                     {/* Delete column disabled. Uncomment with the matching cell below to re-enable. */}
@@ -272,6 +274,9 @@ export function CfoLedger() {
                       <td>{fmt(row.openingBalance)}</td>
                       <td>{fmt(row.inbound)}</td>
                       <td>{fmt(row.outbound)}</td>
+                      <td>
+                        <CfoRemarkTag value={row.remark} />
+                      </td>
                       <td className="num-strong">{fmt(row.closingBalance)}</td>
                       <td>{enteredByLabel(row.enteredBy)}</td>
                       {/* Delete action disabled. Uncomment with the matching header above to re-enable. */}

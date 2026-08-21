@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { companyLabel } from "../constants/companies";
+import { cfoRemarkDisplay } from "../constants/transactionRemarks.js";
 import { useDialog } from "../context/DialogContext.jsx";
 import { roleLabel } from "../utils/role.js";
 
@@ -178,6 +179,7 @@ export function CfoEditedLedger() {
                   <th>Date</th>
                   <th>In</th>
                   <th>Out</th>
+                  <th>Remark</th>
                   <th>Closing</th>
                   {tab === "pending" ? <th /> : null}
                   {tab !== "pending" ? <th>Reviewed</th> : null}
@@ -218,6 +220,11 @@ export function CfoEditedLedger() {
                         before={before.outbound}
                         after={after.outbound}
                         format={fmt}
+                      />
+                      <ChangeCell
+                        before={before.remark}
+                        after={after.remark}
+                        format={cfoRemarkDisplay}
                       />
                       <ChangeCell
                         before={before.closingBalance}

@@ -1,3 +1,5 @@
+const { normalizeTransactionRemark } = require("../constants/transactionRemarks");
+
 function toNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
@@ -37,6 +39,7 @@ function normalizeRecordInput(body) {
     openingBalance,
     inbound,
     outbound,
+    remark: normalizeTransactionRemark(body.remark),
     stockReceived,
     stockOut,
     closingBalance,

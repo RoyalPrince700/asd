@@ -19,6 +19,8 @@ import { MyRequests } from "./pages/MyRequests.jsx";
 import { AdminHome } from "./pages/AdminHome.jsx";
 import { AccountantMovement } from "./pages/AccountantMovement.jsx";
 import { AccountantInventory } from "./pages/AccountantInventory.jsx";
+import { TrifoneMovement } from "./pages/TrifoneMovement.jsx";
+import { TrifoneInventory } from "./pages/TrifoneInventory.jsx";
 import { homeForRole } from "./utils/role.js";
 
 export default function App() {
@@ -81,6 +83,22 @@ export default function App() {
             element={
               <ProtectedRoute role="accountant">
                 <AccountantInventory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/trifone/movement"
+            element={
+              <ProtectedRoute role="trifone">
+                <TrifoneMovement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/trifone/inventory"
+            element={
+              <ProtectedRoute role="trifone">
+                <TrifoneInventory />
               </ProtectedRoute>
             }
           />

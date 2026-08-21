@@ -39,6 +39,13 @@ function isLocationlessCompany(value) {
   return company === COMPANIES.TRIFONE || company === COMPANIES.ELECTRONICS;
 }
 
+const TRIFONE_ROLE_COMPANIES = [COMPANIES.TRIFONE, COMPANIES.ELECTRONICS];
+
+function isTrifoneCompany(value) {
+  const company = String(value || "").trim().toLowerCase();
+  return TRIFONE_ROLE_COMPANIES.includes(company);
+}
+
 function isValidCompany(value) {
   return Object.values(COMPANIES).includes(String(value || "").trim().toLowerCase());
 }
@@ -179,6 +186,8 @@ module.exports = {
   COMPANY_SHORT_LABELS,
   COMPANY_OPTIONS,
   isLocationlessCompany,
+  isTrifoneCompany,
+  TRIFONE_ROLE_COMPANIES,
   isValidCompany,
   resolveCompany,
   companyLabel,

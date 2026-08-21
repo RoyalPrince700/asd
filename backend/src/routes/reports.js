@@ -17,6 +17,7 @@ const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const { summarizeRecords } = require("../utils/stock");
 const { companyLabel } = require("../constants/companies");
+const { cfoTransactionRemarkExport } = require("../constants/transactionRemarks");
 const { applyStockIdFilter } = require("../utils/stockId");
 
 const router = express.Router();
@@ -26,6 +27,7 @@ router.use(protect, requireRole("cfo"));
 function enteredByLabel(user) {
   if (!user?.name) return "";
   if (user.role === "accountant") return `${user.name} (Accountant)`;
+  if (user.role === "trifone") return `${user.name} (Trifone)`;
   return user.name;
 }
 
@@ -95,6 +97,7 @@ router.get("/excel", asyncHandler(async (req, res) => {
     { header: "Opening Balance", key: "openingBalance", width: 18 },
     { header: "In", key: "inbound", width: 12 },
     { header: "Out", key: "outbound", width: 12 },
+    { header: "Remark", key: "remark", width: 16 },
     { header: "Stock Received", key: "stockReceived", width: 18 },
     { header: "Stock Out", key: "stockOut", width: 14 },
     { header: "Closing Balance", key: "closingBalance", width: 18 },
@@ -117,6 +120,7 @@ router.get("/excel", asyncHandler(async (req, res) => {
       openingBalance: row.openingBalance,
       inbound: row.inbound,
       outbound: row.outbound,
+      remark: cfoTransactionRemarkExport(row.remark),
       stockReceived: row.stockReceived,
       stockOut: row.stockOut,
       closingBalance: row.closingBalance,
@@ -203,6 +207,7 @@ router.get("/docx", asyncHandler(async (req, res) => {
       "Opening",
       "In",
       "Out",
+      "Remark",
       "Received",
       "Stock Out",
       "Closing",
@@ -222,6 +227,7 @@ router.get("/docx", asyncHandler(async (req, res) => {
           cell(formatNumber(row.openingBalance), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.inbound), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.outbound), { align: AlignmentType.RIGHT }),
+          cell(cfoTransactionRemarkExport(row.remark)),
           cell(formatNumber(row.stockReceived), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.stockOut), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.closingBalance), { align: AlignmentType.RIGHT }),
@@ -320,6 +326,7 @@ router.get("/ledger/excel", asyncHandler(async (req, res) => {
     { header: "Opening", key: "openingBalance", width: 14 },
     { header: "In", key: "inbound", width: 12 },
     { header: "Out", key: "outbound", width: 12 },
+    { header: "Remark", key: "remark", width: 16 },
     { header: "Closing", key: "closingBalance", width: 14 },
     { header: "Posted by", key: "enteredBy", width: 22 },
   ];
@@ -341,6 +348,7 @@ router.get("/ledger/excel", asyncHandler(async (req, res) => {
       openingBalance: row.openingBalance,
       inbound: row.inbound,
       outbound: row.outbound,
+      remark: cfoTransactionRemarkExport(row.remark),
       closingBalance: row.closingBalance,
       enteredBy: enteredByLabel(row.enteredBy),
     });
@@ -383,6 +391,7 @@ router.get("/ledger/docx", asyncHandler(async (req, res) => {
       "Opening",
       "In",
       "Out",
+      "Remark",
       "Closing",
       "Clerk",
     ].map((label) =>
@@ -402,6 +411,7 @@ router.get("/ledger/docx", asyncHandler(async (req, res) => {
           cell(formatNumber(row.openingBalance), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.inbound), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.outbound), { align: AlignmentType.RIGHT }),
+          cell(cfoTransactionRemarkExport(row.remark)),
           cell(formatNumber(row.closingBalance), { align: AlignmentType.RIGHT }),
           cell(enteredByLabel(row.enteredBy) || "—"),
         ],

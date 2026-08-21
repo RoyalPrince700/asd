@@ -15,6 +15,7 @@ const {
   emptyTrifoneData,
   emptyElectronicsData,
   isLocationlessCompany,
+  isTrifoneCompany,
 } = require("../constants/companies");
 const {
   parseAccessibleInventoryExcel,
@@ -172,7 +173,7 @@ function catalogOpeningFromRow(row) {
   return Number(trifoneData.currentStock) || 0;
 }
 
-router.get("/my-inventory", requireRole("clerk", "accountant"), asyncHandler(async (req, res) => {
+router.get("/my-inventory", requireRole("clerk", "accountant", "trifone"), asyncHandler(async (req, res) => {
   let company;
   let location;
 
@@ -191,6 +192,14 @@ router.get("/my-inventory", requireRole("clerk", "accountant"), asyncHandler(asy
     } else {
       location = null;
     }
+  } else if (req.user.role === "trifone") {
+    company = resolveCompany(req.query.company);
+    if (!company || !isTrifoneCompany(company)) {
+      return res.status(400).json({
+        message: "Company must be Trifone Gadgets or Trifone Electronics.",
+      });
+    }
+    location = null;
   } else {
     const assignment = resolveStaffAssignment(req.user);
     if (!assignment) {

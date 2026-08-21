@@ -2,14 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { SearchableSelect } from "../components/SearchableSelect.jsx";
 import { RemarkTag } from "../components/RemarkTag.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
-import { companyLabel, isLocationlessCompany } from "../constants/companies";
+import {
+  TRIFONE_ROLE_COMPANY_OPTIONS,
+  companyLabel,
+} from "../constants/companies";
 import {
   DEFAULT_TRANSACTION_REMARK,
   TRANSACTION_REMARKS,
 } from "../constants/transactionRemarks.js";
-import { staffAssignmentLabel, staffCompany } from "../utils/staff.js";
+import { enteredByLabel } from "../utils/role.js";
 
 const emptyForm = {
   productName: "",
@@ -30,14 +32,10 @@ function fmt(value) {
   });
 }
 
-export function StaffMovement() {
-  const { user } = useAuth();
+export function TrifoneMovement() {
   const { confirm, toast } = useDialog();
 
-  const company = staffCompany(user);
-  const assignmentLabel = staffAssignmentLabel(user);
-  const isLocationlessStaff = isLocationlessCompany(user?.assignedCompany);
-
+  const [company, setCompany] = useState("trifone");
   const [form, setForm] = useState(emptyForm);
   const [products, setProducts] = useState([]);
   const [records, setRecords] = useState([]);
@@ -63,7 +61,7 @@ export function StaffMovement() {
   }, [products, form.productName]);
 
   async function loadRecords(nextStockId = appliedStockId) {
-    const params = {};
+    const params = { company };
     if (nextStockId) params.stockId = nextStockId;
     const data = await api.records(params);
     setRecords(data.records);
@@ -86,15 +84,10 @@ export function StaffMovement() {
     }
 
     api
-      .stockLevel(
-        form.productName,
-        company,
-        editingId,
-        user?.location || undefined
-      )
+      .stockLevel(form.productName, company, editingId)
       .then((data) => setOpeningBalance(data.openingBalance))
       .catch((err) => setError(err.message));
-  }, [form.productName, company, editingId, user?.location]);
+  }, [form.productName, company, editingId]);
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -141,10 +134,7 @@ export function StaffMovement() {
       setStockIdSearch("");
       setAppliedStockId("");
       await loadRecords("");
-      toast({
-        message: successMessage,
-        type: "success",
-      });
+      toast({ message: successMessage, type: "success" });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -162,6 +152,7 @@ export function StaffMovement() {
     }
 
     setEditingId(row._id);
+    setCompany(row.company);
     setForm({
       productName: row.productName,
       date: row.date.slice(0, 10),
@@ -195,13 +186,12 @@ export function StaffMovement() {
     <div className="page">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Data clerk · {assignmentLabel}</p>
+          <p className="eyebrow">Trifone</p>
           <h1>Stock movement</h1>
         </div>
         <p className="lede tight">
-          Select a {isLocationlessStaff ? "item" : "book"}, enter In or Out, then post
-          the transaction. Edits to existing transactions apply immediately for you
-          but are sent to the CFO for approval before they become permanent.
+          Post In or Out for Trifone Gadgets and Trifone Electronics products.
+          Edits are sent to the CFO for approval before they become permanent.
         </p>
       </header>
 
@@ -209,14 +199,20 @@ export function StaffMovement() {
         <div className="grid-3">
           <label>
             Company
-            <input type="text" value={companyLabel(company)} readOnly />
+            <select
+              value={company}
+              onChange={(e) => {
+                setCompany(e.target.value);
+                resetForm();
+              }}
+            >
+              {TRIFONE_ROLE_COMPANY_OPTIONS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
           </label>
-          {!isLocationlessStaff ? (
-            <label>
-              Location
-              <input type="text" value={user?.location || ""} readOnly />
-            </label>
-          ) : null}
           <label>
             Date
             <input
@@ -230,12 +226,12 @@ export function StaffMovement() {
 
         <div className="grid-3">
           <label>
-            {isLocationlessStaff ? "Item" : "Product"}
+            Item
             <SearchableSelect
               options={productOptions}
               value={form.productName}
               onChange={(name) => setField("productName", name)}
-              placeholder={isLocationlessStaff ? "Search items…" : "Search books…"}
+              placeholder="Search items…"
               required
             />
           </label>
@@ -307,7 +303,7 @@ export function StaffMovement() {
 
       <section className="table-wrap">
         <div className="section-head">
-          <h2>Your transactions</h2>
+          <h2>{companyLabel(company, { short: true })} transactions</h2>
           <span>{records.length} records</span>
         </div>
         <form
@@ -346,12 +342,13 @@ export function StaffMovement() {
               <tr>
                 <th>Stock ID</th>
                 <th>Date</th>
-                <th>{isLocationlessStaff ? "Item" : "Product"}</th>
+                <th>Item</th>
                 <th>Opening</th>
                 <th>In</th>
                 <th>Out</th>
                 <th>Remark</th>
                 <th>Closing</th>
+                <th>Posted by</th>
                 <th>Status</th>
                 <th />
               </tr>
@@ -359,10 +356,10 @@ export function StaffMovement() {
             <tbody>
               {records.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="hint">
+                  <td colSpan={11} className="hint">
                     {appliedStockId
                       ? "No transaction matches that stock ID."
-                      : "No transactions yet. Post your first In or Out above."}
+                      : "No transactions for this company yet."}
                   </td>
                 </tr>
               ) : (
@@ -378,6 +375,7 @@ export function StaffMovement() {
                       <RemarkTag value={row.remark} />
                     </td>
                     <td className="num-strong">{fmt(row.closingBalance)}</td>
+                    <td>{enteredByLabel(row.enteredBy)}</td>
                     <td>
                       {row.pendingApproval ? (
                         <span className="status-pill status-pill--pending">

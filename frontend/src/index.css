@@ -1642,3 +1642,24 @@ input[readonly] {
   color: var(--up);
 }
 
+.remark-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  background: #eef2f6;
+  color: var(--navy);
+}
+
+.remark-tag--return {
+  background: #fdecea;
+  color: #9a1f16;
+}
+
+.remark-tag--promo {
+  background: #eef6ff;
+  color: #1d4f91;
+}
+

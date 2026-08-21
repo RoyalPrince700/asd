@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { SearchableSelect } from "../components/SearchableSelect.jsx";
+import { RemarkTag } from "../components/RemarkTag.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
 import {
   ACCESSIBLE_LOCATIONS,
@@ -8,12 +9,17 @@ import {
   companyLabel,
   isLocationlessCompany,
 } from "../constants/companies";
+import {
+  DEFAULT_TRANSACTION_REMARK,
+  TRANSACTION_REMARKS,
+} from "../constants/transactionRemarks.js";
 
 const emptyForm = {
   productName: "",
   date: new Date().toISOString().slice(0, 10),
   inbound: "",
   outbound: "",
+  remark: DEFAULT_TRANSACTION_REMARK,
 };
 
 function n(value) {
@@ -120,6 +126,7 @@ export function AccountantMovement() {
         date: form.date,
         inbound: n(form.inbound),
         outbound: n(form.outbound),
+        remark: form.remark,
         stockReceived: 0,
         stockOut: 0,
       };
@@ -170,6 +177,7 @@ export function AccountantMovement() {
       date: row.date.slice(0, 10),
       inbound: String(row.inbound),
       outbound: String(row.outbound),
+      remark: row.remark || DEFAULT_TRANSACTION_REMARK,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -301,6 +309,19 @@ export function AccountantMovement() {
               onChange={(e) => setField("outbound", e.target.value)}
             />
           </label>
+          <label>
+            Remark
+            <select
+              value={form.remark}
+              onChange={(e) => setField("remark", e.target.value)}
+            >
+              {TRANSACTION_REMARKS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {error ? <p className="alert">{error}</p> : null}
@@ -369,6 +390,7 @@ export function AccountantMovement() {
                 <th>Opening</th>
                 <th>In</th>
                 <th>Out</th>
+                <th>Remark</th>
                 <th>Closing</th>
                 <th>Posted by</th>
                 <th>Status</th>
@@ -378,7 +400,7 @@ export function AccountantMovement() {
             <tbody>
               {records.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="hint">
+                  <td colSpan={11} className="hint">
                     {appliedStockId
                       ? "No transaction matches that stock ID."
                       : "No transactions for this company and location yet."}
@@ -393,6 +415,9 @@ export function AccountantMovement() {
                     <td>{fmt(row.openingBalance)}</td>
                     <td>{fmt(row.inbound)}</td>
                     <td>{fmt(row.outbound)}</td>
+                    <td>
+                      <RemarkTag value={row.remark} />
+                    </td>
                     <td className="num-strong">{fmt(row.closingBalance)}</td>
                     <td>
                       {row.enteredBy?.role === "accountant"

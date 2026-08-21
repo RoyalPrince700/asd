@@ -41,6 +41,11 @@ const NAV_BY_ROLE = {
     { to: "/accountant/inventory", label: "Inventory", icon: Package },
     MY_REQUESTS_NAV,
   ],
+  trifone: [
+    { to: "/trifone/movement", label: "Stock movement", icon: ClipboardList },
+    { to: "/trifone/inventory", label: "Inventory", icon: Package },
+    MY_REQUESTS_NAV,
+  ],
   clerk: [{ to: "/entry", label: "Pending assignment", icon: Clock }, MY_REQUESTS_NAV],
 };
 

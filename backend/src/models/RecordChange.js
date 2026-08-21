@@ -1,5 +1,9 @@
 const mongoose = require("mongoose");
 const { COMPANIES, ACCESSIBLE_LOCATIONS } = require("../constants/companies");
+const {
+  DEFAULT_TRANSACTION_REMARK,
+  TRANSACTION_REMARKS,
+} = require("../constants/transactionRemarks");
 
 const snapshotFields = {
   productName: { type: String, required: true, trim: true },
@@ -17,6 +21,11 @@ const snapshotFields = {
   openingBalance: { type: Number, required: true, min: 0 },
   inbound: { type: Number, required: true, min: 0, default: 0 },
   outbound: { type: Number, required: true, min: 0, default: 0 },
+  remark: {
+    type: String,
+    enum: TRANSACTION_REMARKS,
+    default: DEFAULT_TRANSACTION_REMARK,
+  },
   stockReceived: { type: Number, required: true, min: 0, default: 0 },
   stockOut: { type: Number, required: true, min: 0, default: 0 },
   closingBalance: { type: Number, required: true, min: 0 },

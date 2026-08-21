@@ -8,6 +8,7 @@ const SNAPSHOT_KEYS = [
   "openingBalance",
   "inbound",
   "outbound",
+  "remark",
   "stockReceived",
   "stockOut",
   "closingBalance",

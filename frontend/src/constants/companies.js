@@ -18,8 +18,16 @@ export const COMPANY_OPTIONS = [
   },
 ];
 
-export function isLocationlessCompany(id) {
+export const TRIFONE_ROLE_COMPANY_OPTIONS = COMPANY_OPTIONS.filter(
+  (item) => item.id === "trifone" || item.id === "electronics"
+);
+
+export function isTrifoneCompany(id) {
   return id === "trifone" || id === "electronics";
+}
+
+export function isLocationlessCompany(id) {
+  return isTrifoneCompany(id);
 }
 
 export function companyLabel(id, { short = false } = {}) {

@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api";
+import { RemarkTag } from "../components/RemarkTag.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { companyLabel, isLocationlessCompany } from "../constants/companies";
 import { staffAssignmentLabel, staffCompany } from "../utils/staff.js";
@@ -252,6 +253,7 @@ export function StaffOverview() {
                 <th>{isLocationlessStaff ? "Item" : "Product"}</th>
                 <th>In</th>
                 <th>Out</th>
+                <th>Remark</th>
                 <th>Closing</th>
               </tr>
             </thead>
@@ -264,12 +266,15 @@ export function StaffOverview() {
                     <td>{row.productName}</td>
                     <td>{fmt(row.inbound)}</td>
                     <td>{fmt(row.outbound)}</td>
+                    <td>
+                      <RemarkTag value={row.remark} />
+                    </td>
                     <td className="num-strong">{fmt(row.closingBalance)}</td>
                   </tr>
                 ))
               ) : (
                   <tr>
-                    <td colSpan={6} className="hint">
+                    <td colSpan={7} className="hint">
                       No transactions yet.
                     </td>
                   </tr>
