@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { SearchableSelect } from "../components/SearchableSelect.jsx";
 import { RemarkTag } from "../components/RemarkTag.jsx";
+import { MovementUpload } from "../components/MovementUpload.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
 import { companyLabel, isLocationlessCompany } from "../constants/companies";
@@ -304,6 +305,13 @@ export function StaffMovement() {
           ) : null}
         </div>
       </form>
+
+      <MovementUpload
+        company={company}
+        location={isLocationlessStaff ? undefined : user?.location}
+        date={form.date}
+        onSuccess={() => loadRecords().catch((err) => setError(err.message))}
+      />
 
       <section className="table-wrap">
         <div className="section-head">

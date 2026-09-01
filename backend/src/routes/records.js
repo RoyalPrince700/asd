@@ -1,4 +1,5 @@
 const express = require("express");
+const multer = require("multer");
 const StockRecord = require("../models/StockRecord");
 const Product = require("../models/Product");
 const { protect, requireRole } = require("../middleware/auth");
@@ -19,8 +20,22 @@ const {
   attachPendingMeta,
 } = require("../utils/recordChanges");
 const { applyStockIdFilter, nextStockId } = require("../utils/stockId");
+const { parseMovementExcel, importMovementRows } = require("../utils/movementImport");
 
 const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok =
+      /\.xlsx?$/i.test(file.originalname) ||
+      file.mimetype ===
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.mimetype === "application/vnd.ms-excel";
+    cb(null, ok);
+  },
+});
 
 router.use(protect);
 
@@ -265,6 +280,76 @@ router.get("/my-summary", requireRole("clerk"), asyncHandler(async (req, res) =>
     },
   });
 }));
+
+router.post(
+  "/upload",
+  requireRole("clerk", "accountant", "trifone"),
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (req.user.role === "clerk" && !isAssignedStaff(req.user)) {
+      return res.status(403).json({
+        message: "You have not been assigned yet. Contact CFO.",
+      });
+    }
+
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: "Choose an Excel file to upload." });
+    }
+
+    const data = {
+      company: String(req.body.company || "").trim().toLowerCase(),
+      location: req.body.location
+        ? String(req.body.location).trim().toUpperCase()
+        : null,
+      date: req.body.date ? new Date(req.body.date) : new Date(),
+    };
+
+    let scopeError = null;
+    if (req.user.role === "accountant") {
+      scopeError = validateAccountantRecordData(data);
+    } else if (req.user.role === "trifone") {
+      scopeError = validateTrifoneRecordData(data);
+    } else {
+      if (!data.company || !isValidCompany(data.company)) {
+        return res.status(400).json({ message: "Select a company." });
+      }
+      scopeError = applyClerkScope(data, req.user);
+    }
+
+    if (scopeError) {
+      return res.status(403).json({ message: scopeError });
+    }
+
+    let rows;
+    try {
+      rows = await parseMovementExcel(req.file.buffer);
+    } catch (err) {
+      return res.status(400).json({ message: err.message });
+    }
+
+    const results = await importMovementRows(rows, {
+      company: data.company,
+      location: data.location,
+      date: data.date,
+      enteredBy: req.user._id,
+    });
+
+    const parts = [`${results.imported} transaction${results.imported === 1 ? "" : "s"} imported.`];
+    if (results.reconciled) {
+      parts.push(
+        `${results.reconciled} opening balance${results.reconciled === 1 ? "" : "s"} reconciled.`
+      );
+    }
+    if (results.skipped) {
+      parts.push(`${results.skipped} row${results.skipped === 1 ? "" : "s"} skipped.`);
+    }
+
+    res.json({
+      message: parts.join(" "),
+      ...results,
+    });
+  })
+);
 
 router.post("/", requireRole("clerk", "accountant", "trifone"), asyncHandler(async (req, res) => {
   if (req.user.role === "clerk" && !isAssignedStaff(req.user)) {

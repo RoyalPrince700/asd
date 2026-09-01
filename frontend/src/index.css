@@ -824,6 +824,54 @@ th {
   width: 100%;
 }
 
+.file-picker {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.file-picker-label {
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+.file-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.file-picker-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.file-picker-btn {
+  flex-shrink: 0;
+}
+
+.file-picker-name {
+  flex: 1;
+  min-width: 160px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.file-picker-clear {
+  flex-shrink: 0;
+}
+
 .product-list {
   list-style: none;
   margin: 0;

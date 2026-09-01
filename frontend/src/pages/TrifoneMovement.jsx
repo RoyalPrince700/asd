@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { SearchableSelect } from "../components/SearchableSelect.jsx";
 import { RemarkTag } from "../components/RemarkTag.jsx";
+import { MovementUpload } from "../components/MovementUpload.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
 import {
   TRIFONE_ROLE_COMPANY_OPTIONS,
@@ -300,6 +301,13 @@ export function TrifoneMovement() {
           ) : null}
         </div>
       </form>
+
+      <MovementUpload
+        company={company}
+        date={form.date}
+        scopeReady
+        onSuccess={() => loadRecords().catch((err) => setError(err.message))}
+      />
 
       <section className="table-wrap">
         <div className="section-head">
