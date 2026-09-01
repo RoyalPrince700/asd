@@ -9,18 +9,19 @@ const {
   COMPANIES,
   COMPANY_LABELS,
   ACCESSIBLE_LOCATIONS,
-  TRIFONE_AUGUST_FIELDS,
-  ELECTRONICS_FIELDS,
+  TRIFONE_CATALOG_FIELDS,
+  ELECTRONICS_CATALOG_FIELDS,
   emptyAccessibleStock,
   emptyTrifoneData,
   emptyElectronicsData,
+  normalizeTrifoneData,
+  normalizeElectronicsData,
   isLocationlessCompany,
   isTrifoneCompany,
 } = require("../constants/companies");
 const {
-  parseAccessibleInventoryExcel,
-  parseTrifoneInventoryExcel,
-  parseElectronicsInventoryExcel,
+  parseCatalogNamesExcel,
+  namesToCatalogRows,
   getCurrentStock,
   buildStockSnapshot,
   buildMovementMap,
@@ -64,12 +65,12 @@ function visibleAccessibleLocations(hiddenColumns = []) {
   return ACCESSIBLE_LOCATIONS.filter((loc) => !hiddenColumns.includes(loc));
 }
 
-function visibleTrifoneFields(hiddenColumns = []) {
-  return TRIFONE_AUGUST_FIELDS.filter((field) => !hiddenColumns.includes(field.key));
+function visibleTrifoneFields() {
+  return TRIFONE_CATALOG_FIELDS;
 }
 
-function visibleElectronicsFields(hiddenColumns = []) {
-  return ELECTRONICS_FIELDS.filter((field) => !hiddenColumns.includes(field.key));
+function visibleElectronicsFields() {
+  return ELECTRONICS_CATALOG_FIELDS;
 }
 
 function formatAccessibleProduct(row, visibleLocations = ACCESSIBLE_LOCATIONS) {
@@ -88,9 +89,12 @@ function formatAccessibleProduct(row, visibleLocations = ACCESSIBLE_LOCATIONS) {
   };
 }
 
-function formatTrifoneProduct(row) {
-  const trifoneData =
-    row.trifoneData?.toObject?.() || row.trifoneData || emptyTrifoneData();
+function formatTrifoneProduct(row, movementMap = null) {
+  const trifoneData = normalizeTrifoneData(row.trifoneData);
+  if (movementMap) {
+    const net = movementMap.get(row.name) || 0;
+    trifoneData.closingStock = Math.max(0, trifoneData.openingStock + net);
+  }
 
   return {
     _id: row._id,
@@ -100,43 +104,33 @@ function formatTrifoneProduct(row) {
   };
 }
 
-function formatElectronicsProduct(row) {
-  const electronicsData =
-    row.electronicsData?.toObject?.() || row.electronicsData || emptyElectronicsData();
+function formatElectronicsProduct(row, movementMap = null) {
+  const electronicsData = normalizeElectronicsData(row.electronicsData);
+  if (movementMap) {
+    const net = movementMap.get(row.name) || 0;
+    electronicsData.closingStock = Math.max(0, electronicsData.openingStock + net);
+  }
 
   return {
     _id: row._id,
     name: row.name,
     company: row.company,
     electronicsData,
-    currentStock: Number(electronicsData.currentStock) || 0,
+    openingStock: electronicsData.openingStock,
+    closingStock: electronicsData.closingStock,
   };
 }
 
 function formatProduct(row, { live = false, movementMap = null, visibleLocations = ACCESSIBLE_LOCATIONS } = {}) {
   if (row.company === COMPANIES.TRIFONE) {
-    const product = formatTrifoneProduct(row);
-    if (live && movementMap) {
-      product.trifoneData = {
-        ...product.trifoneData,
-        currentStock: liveTrifoneBalance(row, movementMap),
-      };
-      product.live = true;
-    }
+    const product = formatTrifoneProduct(row, live && movementMap ? movementMap : null);
+    if (live && movementMap) product.live = true;
     return product;
   }
 
   if (row.company === COMPANIES.ELECTRONICS) {
-    const product = formatElectronicsProduct(row);
-    if (live && movementMap) {
-      const currentStock = liveLocationlessBalance(row, movementMap);
-      product.electronicsData = {
-        ...product.electronicsData,
-        currentStock,
-      };
-      product.currentStock = currentStock;
-      product.live = true;
-    }
+    const product = formatElectronicsProduct(row, live && movementMap ? movementMap : null);
+    if (live && movementMap) product.live = true;
     return product;
   }
 
@@ -165,12 +159,12 @@ function resolveStaffAssignment(user) {
 
 function catalogOpeningFromRow(row) {
   if (row.company === COMPANIES.ELECTRONICS) {
-    const data =
-      row.electronicsData?.toObject?.() || row.electronicsData || emptyElectronicsData();
-    return Number(data.currentStock) || 0;
+    return normalizeElectronicsData(row.electronicsData).openingStock;
   }
-  const trifoneData = row.trifoneData?.toObject?.() || row.trifoneData || emptyTrifoneData();
-  return Number(trifoneData.currentStock) || 0;
+  if (row.company === COMPANIES.TRIFONE) {
+    return normalizeTrifoneData(row.trifoneData).openingStock;
+  }
+  return 0;
 }
 
 router.get("/my-inventory", requireRole("clerk", "accountant", "trifone"), asyncHandler(async (req, res) => {
@@ -296,9 +290,9 @@ router.get("/", asyncHandler(async (req, res) => {
     const locations =
       company === COMPANIES.ACCESSIBLE ? visibleAccessibleLocations(hiddenColumns) : [];
     const trifoneFields =
-      company === COMPANIES.TRIFONE ? visibleTrifoneFields(hiddenColumns) : [];
+      company === COMPANIES.TRIFONE ? visibleTrifoneFields() : [];
     const electronicsFields =
-      company === COMPANIES.ELECTRONICS ? visibleElectronicsFields(hiddenColumns) : [];
+      company === COMPANIES.ELECTRONICS ? visibleElectronicsFields() : [];
 
     return res.json({
       products: rows.map((row) =>
@@ -363,137 +357,22 @@ router.get("/template", requireRole("cfo"), asyncHandler(async (req, res) => {
   const workbook = new ExcelJS.Workbook();
   const label = COMPANY_LABELS[company].replace(/\s+/g, "-").toLowerCase();
 
-  if (company === COMPANIES.TRIFONE) {
-    const sheet = workbook.addWorksheet("Stock Register");
-    sheet.columns = [
-      { header: "ITEM NAME", key: "name", width: 24 },
-      ...TRIFONE_AUGUST_FIELDS.map((field) => ({
-        header: field.label,
-        key: field.key,
-        width: field.type === "text" ? 18 : 16,
-      })),
-    ];
-    sheet.addRow({
-      name: "X801 MAX",
-      openingStock2Aug: 5,
-      openingStock9Aug: 5,
-      openingStock16Aug: 5,
-      restock2Aug: 0,
-      currentStock: 5,
-      unitsInMaint: 3,
-      unitsInMaint3Aug: 3,
-      totalMaint: 3,
-      returns: 0,
-      maintenanceValue: 165000,
-      returnValue: 0,
-      unitsSold: 1150,
-      costPrice: 45000,
-      unitPrice: 55000,
-      salesRevenue: 63250000,
-      stockValueOnHand: 275000,
-      remarks: "",
-    });
-    sheet.addRow({
-      name: "Q72",
-      openingStock2Aug: 0,
-      openingStock9Aug: 0,
-      openingStock16Aug: 0,
-      restock2Aug: 0,
-      currentStock: 0,
-      unitsInMaint: 0,
-      unitsInMaint3Aug: 0,
-      totalMaint: 0,
-      returns: 0,
-      maintenanceValue: 0,
-      returnValue: 0,
-      unitsSold: 0,
-      costPrice: 0,
-      unitPrice: 0,
-      salesRevenue: 0,
-      stockValueOnHand: 0,
-      remarks: "Out of Stock",
-    });
-  } else if (company === COMPANIES.ELECTRONICS) {
-    const sheet = workbook.addWorksheet("Inventory Movement");
-    sheet.getRow(1).values = [
-      undefined,
-      "S/N",
-      "DATE",
-      "DETAILS",
-      "JUICE EXTRACTOR",
-      "DIGITAL 10L AIR FRYER",
-      "MANUAL 10L AIR FRYER",
-      "TB 15E BLENDER",
-      "HOT PLATE",
-    ];
-    sheet.getRow(1).font = { bold: true };
-    sheet.getRow(2).values = [
-      undefined,
-      1,
-      "14/02/2026",
-      "OPENING INVENTORY",
-      160,
-      100,
-      80,
-      400,
-      120,
-    ];
-    sheet.getRow(3).values = [
-      undefined,
-      2,
-      "31/07/2026",
-      "CLOSING BALANCE AS AT JULY",
-      0,
-      64,
-      178,
-      476,
-      148,
-    ];
-    sheet.columns = [
-      { width: 8 },
-      { width: 14 },
-      { width: 32 },
-      { width: 18 },
-      { width: 22 },
-      { width: 22 },
-      { width: 16 },
-      { width: 12 },
-    ];
-  } else {
-    const sheet = workbook.addWorksheet("Inventory");
-    sheet.columns = [
-      { header: "BookName", key: "name", width: 42 },
-      ...ACCESSIBLE_LOCATIONS.map((loc) => ({
-        header: loc,
-        key: loc,
-        width: 10,
-      })),
-    ];
-    sheet.addRow({
-      name: "30 MINUTES ON THE ASSEMBLY",
-      HO: 319,
-      AK: 54,
-      AB: 183,
-      ED: 52,
-      LA: 81,
-      KA: 31,
-      US: 102,
-      AN: 33,
-      ANX: 32,
-    });
-    sheet.addRow({
-      name: "A JOLLY RIDE TO GRANDPA",
-      HO: 0,
-      AK: 12,
-      AB: 0,
-      ED: 8,
-      LA: 0,
-      KA: 0,
-      US: 0,
-      AN: 0,
-      ANX: 0,
-    });
-  }
+  const nameHeader =
+    company === COMPANIES.TRIFONE
+      ? "ITEM NAME"
+      : company === COMPANIES.ELECTRONICS
+        ? "Item Name"
+        : "BookName";
+
+  const sheet = workbook.addWorksheet("Catalog");
+  sheet.columns = [
+    { header: nameHeader, key: "name", width: 42 },
+    { header: "Opening Stock", key: "opening", width: 16 },
+    { header: "Closing Stock", key: "closing", width: 16 },
+  ];
+  sheet.addRow({ name: "Example product 1", opening: 100, closing: 85 });
+  sheet.addRow({ name: "Example product 2", opening: 50, closing: 40 });
+  sheet.addRow({ name: "Example product 3", opening: 0, closing: 0 });
 
   res.setHeader(
     "Content-Type",
@@ -615,23 +494,17 @@ router.post(
 
     const mode = resolveUploadMode(req.body.mode || req.query.mode);
 
-    let rows = [];
-    if (company === COMPANIES.TRIFONE) {
-      rows = await parseTrifoneInventoryExcel(req.file.buffer);
-    } else if (company === COMPANIES.ELECTRONICS) {
-      rows = await parseElectronicsInventoryExcel(req.file.buffer);
-    } else {
-      rows = await parseAccessibleInventoryExcel(req.file.buffer);
-    }
+    const names = await parseCatalogNamesExcel(req.file.buffer, company);
+    const rows = namesToCatalogRows(names, company);
 
     if (!rows.length) {
       return res.status(400).json({
         message:
           company === COMPANIES.TRIFONE
-            ? "No Trifone Gadgets products found. Use the stock register with ITEM NAME and August columns."
+            ? "No product names found. Use a column headed ITEM NAME or Item Name."
             : company === COMPANIES.ELECTRONICS
-              ? "No Trifone Electronics products found. Use the Inventory Movement sheet with product names across the top and a CLOSING BALANCE AS AT JULY row."
-            : "No products found. Use BookName plus location columns HO, AK, AB, ED, LA, KA, US, AN, ANX.",
+              ? "No product names found. Use a column headed Item Name, or product names across the top row."
+            : "No product names found. Use a column headed BookName or Item Name.",
       });
     }
 
@@ -652,39 +525,9 @@ router.delete(
 
     const hiddenColumns = await getHiddenColumns(company);
 
-    if (company === COMPANIES.TRIFONE) {
-      const field = TRIFONE_AUGUST_FIELDS.find((item) => item.key === columnKey);
-      if (!field) {
-        return res.status(400).json({ message: "Invalid column." });
-      }
-      if (hiddenColumns.includes(columnKey)) {
-        return res.status(400).json({ message: "Column is already removed." });
-      }
-      const remaining = visibleTrifoneFields(hiddenColumns);
-      if (remaining.length <= 1) {
-        return res.status(400).json({ message: "At least one data column must remain." });
-      }
-
-      await CatalogConfig.findOneAndUpdate(
-        { company },
-        { $addToSet: { hiddenColumns: columnKey } },
-        { upsert: true, new: true }
-      );
-      await Product.updateMany(
-        { company },
-        { $unset: { [`trifoneData.${columnKey}`]: "" } }
-      );
-
-      return res.json({
-        message: `Column "${field.label}" removed from the Trifone Gadgets catalog.`,
-        column: columnKey,
-        company,
-      });
-    }
-
-    if (company === COMPANIES.ELECTRONICS) {
+    if (company === COMPANIES.TRIFONE || company === COMPANIES.ELECTRONICS) {
       return res.status(400).json({
-        message: "The Current Stock column cannot be removed from the Trifone Electronics catalog.",
+        message: "Opening Stock and Closing Stock columns cannot be removed.",
       });
     }
 

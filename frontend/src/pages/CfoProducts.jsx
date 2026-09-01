@@ -23,34 +23,8 @@ const COMPANIES = [
   },
 ];
 
-const TRIFONE_FIELD_LABELS = {
-  openingStock2Aug: "Opening (2/8)",
-  openingStock9Aug: "Opening (9/8)",
-  openingStock16Aug: "Opening (16/8)",
-  restock2Aug: "Restock (2/8)",
-  currentStock: "Current Stock",
-  unitsInMaint: "Units in Maint.",
-  unitsInMaint3Aug: "Maint. (3/8)",
-  totalMaint: "Total Maint.",
-  returns: "Returns",
-  maintenanceValue: "Maint. Value",
-  returnValue: "Return Value",
-  unitsSold: "Units Sold",
-  costPrice: "Cost Price",
-  unitPrice: "Unit Price",
-  salesRevenue: "Sales Revenue",
-  stockValueOnHand: "Stock Value",
-  remarks: "Remarks",
-};
-
-function formatCellValue(value, type) {
-  if (type === "text") return value || "—";
-  if (type === "money") return Number(value || 0).toLocaleString();
+function formatCellValue(value) {
   return Number(value || 0).toLocaleString();
-}
-
-function trifoneFieldLabel(field) {
-  return TRIFONE_FIELD_LABELS[field.key] || field.label;
 }
 
 function catalogCacheKey(companyId, searchValue = "") {
@@ -208,7 +182,7 @@ export function CfoProducts() {
         title: isReplace ? "Replace catalog" : "Update catalog",
         message: isReplace
           ? `This will delete all ${total.toLocaleString()} existing products for ${activeCompany.label} and replace them with the uploaded file only. Continue?`
-          : `This will update stock figures for matching products and add any new ones from the file. Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`,
+          : `This will add new products from the file and reset matching products to zero stock. Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`,
         confirmLabel: isReplace ? "Replace catalog" : "Update catalog",
         variant: isReplace ? "danger" : "default",
       }))
@@ -304,9 +278,18 @@ export function CfoProducts() {
 
   const start = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const end = Math.min(page * PAGE_SIZE, total);
+  const trifoneColumns = trifoneFields.length
+    ? trifoneFields
+    : [
+        { key: "openingStock", label: "Opening Stock", type: "count" },
+        { key: "closingStock", label: "Closing Stock", type: "count" },
+      ];
   const electronicsColumns = electronicsFields.length
     ? electronicsFields
-    : [{ key: "currentStock", label: "Current Stock", type: "count" }];
+    : [
+        { key: "openingStock", label: "Opening Stock", type: "count" },
+        { key: "closingStock", label: "Closing Stock", type: "count" },
+      ];
 
   return (
     <div className="page">
@@ -316,11 +299,9 @@ export function CfoProducts() {
           <h1>Product catalog</h1>
         </div>
         <p className="lede tight">
-          Upload inventory by company. Use <strong>Update catalog</strong> to refresh
-          figures from a new month&apos;s Excel while keeping products not in the file.
-          Trifone Gadgets reads August columns only. Trifone Electronics reads product
-          names from the top row and the <strong>July closing balance</strong> row only.
-          Stock counts reflect live balances updated by staff.
+          Upload product names by company. Only names are read from Excel — opening
+          and closing stock start at zero. Clerks update balances from their
+          dashboards; detailed tracking stays in the ledger.
         </p>
       </header>
 
@@ -362,27 +343,27 @@ export function CfoProducts() {
               accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             />
           </label>
-          {isTrifone ? (
-            <p className="hint">
-              Upload the full <strong>Stock &amp; Maintenance Operations Register</strong>.
-              We read <strong>ITEM NAME</strong> plus August fields only (opening stock,
-              restock, current stock, maintenance, sales, and remarks). April–July
-              columns are ignored.
-            </p>
-          ) : isElectronics ? (
-            <p className="hint">
-              Upload the <strong>Inventory Movement</strong> workbook. Product names
-              sit across the top (Juice Extractor, Digital 10L Air Fryer, and so on).
-              Earlier movement rows are ignored — only the last{" "}
-              <strong>CLOSING BALANCE AS AT JULY</strong> row is imported as current stock.
-            </p>
-          ) : (
-            <p className="hint">
-              Required columns: <strong>BookName</strong>, then location counts for{" "}
-              {locations.length ? locations.join(", ") : "HO, AK, AB, ED, LA, KA, US, AN, ANX"}.
-              Sale Price, AllTotal, and Total are ignored if present.
-            </p>
-          )}
+          <p className="hint">
+            {isTrifone ? (
+              <>
+                Only the <strong>ITEM NAME</strong> column is read.{" "}
+                <strong>Opening stock</strong>, <strong>closing stock</strong>, and all
+                other columns are ignored.
+              </>
+            ) : isElectronics ? (
+              <>
+                Only product names are read — from an <strong>Item Name</strong> column
+                or names across the top row. Opening stock, closing stock, and other
+                columns are ignored.
+              </>
+            ) : (
+              <>
+                Only the <strong>BookName</strong> (or Item Name / Product Name) column
+                is read. <strong>Opening stock</strong>, <strong>closing stock</strong>,
+                location counts, and other columns are ignored.
+              </>
+            )}
+          </p>
 
           <fieldset className="upload-mode">
             <legend>Upload mode</legend>
@@ -395,8 +376,8 @@ export function CfoProducts() {
                 onChange={() => setUploadMode("update")}
               />
               <span>
-                <strong>Update catalog</strong> — refresh figures for products in the
-                file; add new products; keep existing products not in the file
+                <strong>Update catalog</strong> — add new products and reset matching
+                ones to zero; keep existing products not in the file
               </span>
             </label>
             <label className="radio-option">
@@ -492,24 +473,8 @@ export function CfoProducts() {
                     <th>#</th>
                     <th>{isItemCatalog ? "Item Name" : "BookName"}</th>
                     {isTrifone
-                      ? trifoneFields.map((field) => (
-                          <th key={field.key}>
-                            <span className="col-head">
-                              <span>{trifoneFieldLabel(field)}</span>
-                              <button
-                                type="button"
-                                className="icon-btn danger"
-                                title={`Delete ${trifoneFieldLabel(field)} column`}
-                                aria-label={`Delete ${trifoneFieldLabel(field)} column`}
-                                disabled={deletingColumn === field.key}
-                                onClick={() =>
-                                  deleteColumn(field.key, trifoneFieldLabel(field))
-                                }
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </span>
-                          </th>
+                      ? trifoneColumns.map((field) => (
+                          <th key={field.key}>{field.label}</th>
                         ))
                       : isElectronics
                         ? electronicsColumns.map((field) => (
@@ -542,17 +507,9 @@ export function CfoProducts() {
                       <td>{start + index}</td>
                       <td>{product.name}</td>
                       {isTrifone
-                        ? trifoneFields.map((field) => (
-                            <td
-                              key={field.key}
-                              className={
-                                field.type === "money" ? "num-strong" : undefined
-                              }
-                            >
-                              {formatCellValue(
-                                product.trifoneData?.[field.key],
-                                field.type
-                              )}
+                        ? trifoneColumns.map((field) => (
+                            <td key={field.key} className="num-strong">
+                              {formatCellValue(product.trifoneData?.[field.key])}
                             </td>
                           ))
                         : isElectronics
@@ -560,8 +517,7 @@ export function CfoProducts() {
                               <td key={field.key} className="num-strong">
                                 {formatCellValue(
                                   product.electronicsData?.[field.key] ??
-                                    product.currentStock,
-                                  field.type
+                                    product[field.key]
                                 )}
                               </td>
                             ))

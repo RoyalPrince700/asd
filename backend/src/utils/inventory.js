@@ -10,6 +10,8 @@ const {
   emptyAccessibleStock,
   emptyTrifoneData,
   emptyElectronicsData,
+  normalizeTrifoneData,
+  normalizeElectronicsData,
   isLocationlessCompany,
 } = require("../constants/companies");
 
@@ -19,6 +21,13 @@ const NAME_HEADERS = [
   /^product(\s*name)?$/i,
   /^name$/i,
 ];
+
+// Headers that are never the product-name column (opening/closing stock, etc.)
+const NON_NAME_HEADERS =
+  /^(opening|closing)(\s*(stock|balance|inventory|qty|quantity))?$/i;
+
+const CATALOG_SKIP_ROW =
+  /^(total|sub\s*totals?|grand\s*total|key\s*performance|reporting\s*period)$/i;
 
 const LOCATION_LOOKUP = Object.fromEntries(
   ACCESSIBLE_LOCATIONS.map((loc) => [loc.toUpperCase(), loc])
@@ -40,12 +49,25 @@ function isNameHeader(text) {
   return NAME_HEADERS.some((pattern) => pattern.test(text));
 }
 
+function isCatalogProductName(name) {
+  const text = cellText(name);
+  if (!text) return false;
+  if (CATALOG_SKIP_ROW.test(text)) return false;
+  if (NON_NAME_HEADERS.test(text)) return false;
+  if (/^opening\s+(stock|balance|inventory)\b/i.test(text)) return false;
+  if (/^closing\s+(stock|balance)\b/i.test(text)) return false;
+  return true;
+}
+
 function findNameColumn(headers) {
   for (const pattern of NAME_HEADERS) {
     const col = headers.findIndex((h) => h && pattern.test(h));
     if (col >= 1) return col;
   }
-  return 1;
+  const col = headers.findIndex(
+    (h, index) => index >= 1 && h && !NON_NAME_HEADERS.test(h) && !SKIP_HEADERS.test(h)
+  );
+  return col >= 1 ? col : 1;
 }
 
 async function parseProductNamesExcel(buffer) {
@@ -75,10 +97,93 @@ async function parseProductNamesExcel(buffer) {
     const name = cellText(row.getCell(nameCol).value);
     if (!name) return;
     if (rowNumber === 1 && isNameHeader(name)) return;
+    if (!isCatalogProductName(name)) return;
     names.push(name);
   });
 
   return [...new Set(names)];
+}
+
+async function parseTrifoneNamesExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) {
+    throw new Error("The Excel file has no worksheets.");
+  }
+
+  const headerRowNumber = findTrifoneHeaderRow(sheet);
+  if (!headerRowNumber) {
+    return parseProductNamesExcel(buffer);
+  }
+
+  const headerRow = sheet.getRow(headerRowNumber);
+  const headers = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber] = normalizeHeader(cell.value);
+  });
+
+  const nameCol = headers.findIndex(
+    (header) => header && /^item\s*name$/i.test(header)
+  );
+  if (nameCol < 1) {
+    return parseProductNamesExcel(buffer);
+  }
+
+  const names = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= headerRowNumber) return;
+
+    const name = cellText(row.getCell(nameCol).value);
+    if (!isTrifoneDataRow(name)) return;
+    names.push(name);
+  });
+
+  return [...new Set(names)];
+}
+
+async function parseElectronicsNamesExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const sheet = findElectronicsSheet(workbook);
+  if (!sheet) {
+    throw new Error("The Excel file has no worksheets.");
+  }
+
+  try {
+    const { productCols } = findElectronicsProductHeader(sheet);
+    const names = productCols.map((col) => col.name);
+    if (names.length) return [...new Set(names)];
+  } catch {
+    // Fall back to a simple name column list.
+  }
+
+  return parseProductNamesExcel(buffer);
+}
+
+async function parseCatalogNamesExcel(buffer, company) {
+  if (company === COMPANIES.TRIFONE) {
+    return parseTrifoneNamesExcel(buffer);
+  }
+  if (company === COMPANIES.ELECTRONICS) {
+    return parseElectronicsNamesExcel(buffer);
+  }
+  return parseProductNamesExcel(buffer);
+}
+
+function namesToCatalogRows(names, company) {
+  if (company === COMPANIES.TRIFONE) {
+    return names.map((name) => ({ name, trifoneData: emptyTrifoneData() }));
+  }
+  if (company === COMPANIES.ELECTRONICS) {
+    return names.map((name) => ({
+      name,
+      electronicsData: emptyElectronicsData(),
+    }));
+  }
+  return names.map((name) => ({ name, stock: emptyAccessibleStock() }));
 }
 
 function parseCount(value) {
@@ -210,12 +315,7 @@ function parseTrifoneValue(value, fieldKey) {
 }
 
 function isTrifoneDataRow(name) {
-  const text = cellText(name);
-  if (!text) return false;
-  if (/^total$/i.test(text)) return false;
-  if (/key\s*performance/i.test(text)) return false;
-  if (/^reporting\s*period$/i.test(text)) return false;
-  return true;
+  return isCatalogProductName(name);
 }
 
 async function parseTrifoneInventoryExcel(buffer) {
@@ -530,17 +630,11 @@ function liveLocationBalance(product, location, movementMap) {
 
 function catalogBaseStock(product) {
   if (product.company === COMPANIES.ELECTRONICS) {
-    const data =
-      product.electronicsData?.toObject?.() ||
-      product.electronicsData ||
-      emptyElectronicsData();
-    return Number(data.currentStock) || 0;
+    return normalizeElectronicsData(product.electronicsData).openingStock;
   }
 
   if (product.company === COMPANIES.TRIFONE) {
-    const trifoneObj =
-      product.trifoneData?.toObject?.() || product.trifoneData || emptyTrifoneData();
-    return Number(trifoneObj.currentStock) || 0;
+    return normalizeTrifoneData(product.trifoneData).openingStock;
   }
 
   return 0;
@@ -615,6 +709,8 @@ async function buildStockSnapshot() {
 
 module.exports = {
   parseProductNamesExcel,
+  parseCatalogNamesExcel,
+  namesToCatalogRows,
   parseAccessibleInventoryExcel,
   parseTrifoneInventoryExcel,
   parseElectronicsInventoryExcel,

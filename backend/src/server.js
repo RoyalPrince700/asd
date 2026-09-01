@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { port, host, allowedOrigins } = require("./config/env");
+const { port, allowedOrigins } = require("./config/env");
 const { connectDb } = require("./config/db");
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
@@ -70,13 +70,12 @@ connectDb()
     if (requestIds.assigned) {
       console.log(`Assigned request IDs to ${requestIds.assigned} existing requests`);
     }
-    const server = app.listen(port, host, () => {
-      console.log(`API listening on ${host}:${port}`);
-      console.log(`Health check: http://127.0.0.1:${port}/api/health`);
+    const server = app.listen(port, () => {
+      console.log(`API listening on port ${port}`);
+      console.log(`Health check: /api/health`);
     });
     server.on("error", (err) => {
       console.error("[server] failed to bind", {
-        host,
         port,
         code: err.code,
         message: err.message,

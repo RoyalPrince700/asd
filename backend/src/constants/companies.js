@@ -64,6 +64,17 @@ const ACCESSIBLE_LOCATIONS = ["HO", "AK", "AB", "ED", "LA", "KA", "US", "AN", "A
 
 const SKIP_HEADERS = /^sale\s*price$|^all\s*total$|^total$/i;
 
+const TRIFONE_CATALOG_FIELDS = [
+  { key: "openingStock", label: "Opening Stock", type: "count" },
+  { key: "closingStock", label: "Closing Stock", type: "count" },
+];
+
+const ELECTRONICS_CATALOG_FIELDS = [
+  { key: "openingStock", label: "Opening Stock", type: "count" },
+  { key: "closingStock", label: "Closing Stock", type: "count" },
+];
+
+// Legacy register fields — kept for analysis of older catalog uploads.
 const TRIFONE_AUGUST_FIELDS = [
   { key: "openingStock2Aug", label: "Opening Stock (2/8/2026)", type: "count" },
   { key: "openingStock9Aug", label: "Opening Stock (9/8/2026)", type: "count" },
@@ -163,21 +174,36 @@ function emptyAccessibleStock() {
   return Object.fromEntries(ACCESSIBLE_LOCATIONS.map((loc) => [loc, 0]));
 }
 
-function emptyTrifoneData() {
-  return Object.fromEntries(
-    TRIFONE_AUGUST_FIELDS.map((field) => [
-      field.key,
-      field.type === "text" ? "" : 0,
-    ])
-  );
+function normalizeTrifoneData(data) {
+  const raw = data?.toObject?.() || data || {};
+  const openingStock =
+    Number(
+      raw.openingStock ??
+        raw.openingStock16Aug ??
+        raw.openingStock9Aug ??
+        raw.openingStock2Aug ??
+        raw.currentStock ??
+        0
+    ) || 0;
+  const closingStock =
+    Number(raw.closingStock ?? raw.currentStock ?? openingStock) || 0;
+  return { openingStock, closingStock };
 }
 
-const ELECTRONICS_FIELDS = [
-  { key: "currentStock", label: "Current Stock", type: "count" },
-];
+function normalizeElectronicsData(data) {
+  const raw = data?.toObject?.() || data || {};
+  const openingStock = Number(raw.openingStock ?? raw.currentStock ?? 0) || 0;
+  const closingStock =
+    Number(raw.closingStock ?? raw.currentStock ?? openingStock) || 0;
+  return { openingStock, closingStock };
+}
+
+function emptyTrifoneData() {
+  return { openingStock: 0, closingStock: 0 };
+}
 
 function emptyElectronicsData() {
-  return { currentStock: 0 };
+  return { openingStock: 0, closingStock: 0 };
 }
 
 module.exports = {
@@ -193,10 +219,13 @@ module.exports = {
   companyLabel,
   ACCESSIBLE_LOCATIONS,
   SKIP_HEADERS,
+  TRIFONE_CATALOG_FIELDS,
   TRIFONE_AUGUST_FIELDS,
   TRIFONE_FIELD_LOOKUP,
   TRIFONE_HEADER_PATTERNS,
-  ELECTRONICS_FIELDS,
+  ELECTRONICS_CATALOG_FIELDS,
+  normalizeTrifoneData,
+  normalizeElectronicsData,
   emptyAccessibleStock,
   emptyTrifoneData,
   emptyElectronicsData,

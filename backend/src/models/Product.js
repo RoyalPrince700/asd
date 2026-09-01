@@ -1,9 +1,5 @@
 const mongoose = require("mongoose");
-const {
-  COMPANIES,
-  ACCESSIBLE_LOCATIONS,
-  TRIFONE_AUGUST_FIELDS,
-} = require("../constants/companies");
+const { COMPANIES, ACCESSIBLE_LOCATIONS } = require("../constants/companies");
 
 const stockSchema = new mongoose.Schema(
   Object.fromEntries(
@@ -13,22 +9,19 @@ const stockSchema = new mongoose.Schema(
 );
 
 const trifoneDataSchema = new mongoose.Schema(
-  Object.fromEntries(
-    TRIFONE_AUGUST_FIELDS.map((field) => {
-      if (field.type === "text") {
-        return [field.key, { type: String, default: "" }];
-      }
-      return [field.key, { type: Number, default: 0, min: 0 }];
-    })
-  ),
-  { _id: false }
+  {
+    openingStock: { type: Number, default: 0, min: 0 },
+    closingStock: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false, strict: false }
 );
 
 const electronicsDataSchema = new mongoose.Schema(
   {
-    currentStock: { type: Number, default: 0, min: 0 },
+    openingStock: { type: Number, default: 0, min: 0 },
+    closingStock: { type: Number, default: 0, min: 0 },
   },
-  { _id: false }
+  { _id: false, strict: false }
 );
 
 const productSchema = new mongoose.Schema(
