@@ -49,6 +49,20 @@ async function nextStockId() {
   return formatStockId(doc.seq);
 }
 
+async function nextStockIds(count) {
+  if (count <= 0) return [];
+  const doc = await Counter.findByIdAndUpdate(
+    "stockId",
+    { $inc: { seq: count } },
+    { new: true, upsert: true }
+  );
+  const ids = [];
+  for (let i = count - 1; i >= 0; i -= 1) {
+    ids.push(formatStockId(doc.seq - i));
+  }
+  return ids;
+}
+
 async function syncStockIdCounter() {
   const last = await StockRecord.findOne({ stockId: STOCK_ID_PATTERN })
     .sort({ stockId: -1 })
@@ -93,5 +107,6 @@ module.exports = {
   normalizeStockIdInput,
   applyStockIdFilter,
   nextStockId,
+  nextStockIds,
   backfillStockIds,
 };

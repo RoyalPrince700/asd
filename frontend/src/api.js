@@ -202,6 +202,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  uploadRecords: (file, { company, location, date } = {}) => {
+    const body = new FormData();
+    body.append("file", file);
+    body.append("company", company);
+    if (location) body.append("location", location);
+    if (date) body.append("date", date);
+    return request("/api/records/upload", { method: "POST", body });
+  },
   updateRecord: (id, payload) =>
     request(`/api/records/${id}`, {
       method: "PUT",

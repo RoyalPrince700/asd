@@ -70,10 +70,13 @@ connectDb()
     if (requestIds.assigned) {
       console.log(`Assigned request IDs to ${requestIds.assigned} existing requests`);
     }
-    const server = app.listen(port, host, () => {
-      console.log(`API listening on ${host}:${port}`);
-      console.log(`Health check: http://127.0.0.1:${port}/api/health`);
-    });
+    const onListen = () => {
+      console.log(`API listening on port ${port}`);
+      console.log(`Health check: http://localhost:${port}/api/health`);
+    };
+    const server = host
+      ? app.listen(port, host, onListen)
+      : app.listen(port, onListen);
     server.on("error", (err) => {
       console.error("[server] failed to bind", {
         host,

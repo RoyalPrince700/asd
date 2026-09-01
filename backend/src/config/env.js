@@ -18,7 +18,7 @@ if (!Number.isFinite(port) || port <= 0) {
   throw new Error("Set PORT in the environment.");
 }
 
-const host = String(process.env.HOST || "0.0.0.0").trim();
+const host = String(process.env.HOST || "").trim() || null;
 const mongoUri = required("MONGO_URI");
 const jwtSecret = required("JWT_SECRET");
 const allowedOrigins = required("CLIENT_ORIGIN")
