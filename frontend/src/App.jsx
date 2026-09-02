@@ -21,6 +21,8 @@ import { AccountantMovement } from "./pages/AccountantMovement.jsx";
 import { AccountantInventory } from "./pages/AccountantInventory.jsx";
 import { TrifoneMovement } from "./pages/TrifoneMovement.jsx";
 import { TrifoneInventory } from "./pages/TrifoneInventory.jsx";
+import { PressMovement } from "./pages/PressMovement.jsx";
+import { PressInventory } from "./pages/PressInventory.jsx";
 import { homeForRole } from "./utils/role.js";
 
 export default function App() {
@@ -99,6 +101,22 @@ export default function App() {
             element={
               <ProtectedRoute role="trifone">
                 <TrifoneInventory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/press/movement"
+            element={
+              <ProtectedRoute role="press">
+                <PressMovement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/press/inventory"
+            element={
+              <ProtectedRoute role="press">
+                <PressInventory />
               </ProtectedRoute>
             }
           />

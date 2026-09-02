@@ -593,12 +593,12 @@ function analyzeElectronicsProducts(products, movementMap, records = []) {
   };
 }
 
-function buildMarkdown({ accessible, trifone, electronics, movement, generatedAt, companyFilter }) {
+function buildMarkdown({ accessible, trifone, electronics, press, movement, generatedAt, companyFilter }) {
   const lines = [];
   const stamp = generatedAt.slice(0, 10);
   const scope =
     companyFilter === "all"
-      ? "Group (APL + Trifone Gadgets + Trifone Electronics)"
+      ? "Group (APL + Trifone Gadgets + Trifone Electronics + Press)"
       : companyLabel(companyFilter, { short: true });
 
   lines.push(`# CFO Financial Analysis — ${scope}`);
@@ -654,6 +654,18 @@ function buildMarkdown({ accessible, trifone, electronics, movement, generatedAt
     lines.push(`- **Out of stock SKUs:** ${fmtNum(elec.outOfStock)}`);
     lines.push(`- **Critical stock (1–5 units):** ${fmtNum(elec.criticalStockCount)} SKUs`);
     lines.push(`- **Low stock (6–20 units):** ${fmtNum(elec.lowStockCount)} SKUs`);
+    lines.push("");
+  }
+
+  if (!companyFilter || companyFilter === "all" || companyFilter === COMPANIES.PRESS) {
+    const prs = press.summary;
+    lines.push(`### ${companyLabel(COMPANIES.PRESS)}`);
+    lines.push("");
+    lines.push(`- **Catalogue size:** ${fmtNum(prs.totalProducts)} raw material items`);
+    lines.push(`- **Current stock (live movement):** ${fmtNum(prs.totalCurrentStock)}`);
+    lines.push(`- **Out of stock items:** ${fmtNum(prs.outOfStock)}`);
+    lines.push(`- **Critical stock (1–5 units):** ${fmtNum(prs.criticalStockCount)} items`);
+    lines.push(`- **Low stock (6–20 units):** ${fmtNum(prs.lowStockCount)} items`);
     lines.push("");
   }
 
@@ -860,7 +872,7 @@ async function buildAnalysis(query = {}) {
     recordFilter.company = companyFilter;
   }
 
-  const [aplProducts, trifoneProducts, electronicsProducts, records] = await Promise.all([
+  const [aplProducts, trifoneProducts, electronicsProducts, pressProducts, records] = await Promise.all([
     companyFilter === "all" || companyFilter === COMPANIES.ACCESSIBLE
       ? Product.find({ company: COMPANIES.ACCESSIBLE }).sort({ name: 1 })
       : [],
@@ -870,17 +882,22 @@ async function buildAnalysis(query = {}) {
     companyFilter === "all" || companyFilter === COMPANIES.ELECTRONICS
       ? Product.find({ company: COMPANIES.ELECTRONICS }).sort({ name: 1 })
       : [],
+    companyFilter === "all" || companyFilter === COMPANIES.PRESS
+      ? Product.find({ company: COMPANIES.PRESS }).sort({ name: 1 })
+      : [],
     StockRecord.find(recordFilter).sort({ date: -1 }),
   ]);
 
-  const [aplMovementMap, trifoneMovementMap, electronicsMovementMap] = await Promise.all([
+  const [aplMovementMap, trifoneMovementMap, electronicsMovementMap, pressMovementMap] = await Promise.all([
     aplProducts.length ? buildMovementMap(COMPANIES.ACCESSIBLE) : new Map(),
     trifoneProducts.length ? buildMovementMap(COMPANIES.TRIFONE) : new Map(),
     electronicsProducts.length ? buildMovementMap(COMPANIES.ELECTRONICS) : new Map(),
+    pressProducts.length ? buildMovementMap(COMPANIES.PRESS) : new Map(),
   ]);
 
   const aplRecords = records.filter((row) => row.company === COMPANIES.ACCESSIBLE);
   const electronicsRecords = records.filter((row) => row.company === COMPANIES.ELECTRONICS);
+  const pressRecords = records.filter((row) => row.company === COMPANIES.PRESS);
 
   const accessible = analyzeAccessibleProducts(aplProducts, aplMovementMap, aplRecords);
   const trifone = analyzeTrifoneProducts(trifoneProducts, trifoneMovementMap);
@@ -888,6 +905,11 @@ async function buildAnalysis(query = {}) {
     electronicsProducts,
     electronicsMovementMap,
     electronicsRecords
+  );
+  const press = analyzeElectronicsProducts(
+    pressProducts,
+    pressMovementMap,
+    pressRecords
   );
   const movement = summarizeRecords(records);
 
@@ -901,6 +923,7 @@ async function buildAnalysis(query = {}) {
     accessible,
     trifone,
     electronics,
+    press,
     movement,
     generatedAt,
     companyFilter,
@@ -912,6 +935,7 @@ async function buildAnalysis(query = {}) {
     accessible,
     trifone,
     electronics,
+    press,
     movement: {
       totals: movement.totals,
       byCompany: movementByCompany,

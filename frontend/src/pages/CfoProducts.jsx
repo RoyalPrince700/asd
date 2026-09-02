@@ -21,6 +21,11 @@ const COMPANIES = [
     label: "Trifone Electronics",
     ready: true,
   },
+  {
+    id: "press",
+    label: "Press (Raw Materials)",
+    ready: true,
+  },
 ];
 
 function formatCellValue(value) {
@@ -38,6 +43,7 @@ export function CfoProducts() {
   const [locations, setLocations] = useState([]);
   const [trifoneFields, setTrifoneFields] = useState([]);
   const [electronicsFields, setElectronicsFields] = useState([]);
+  const [pressFields, setPressFields] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -58,7 +64,8 @@ export function CfoProducts() {
   const activeCompany = COMPANIES.find((item) => item.id === company) || COMPANIES[0];
   const isTrifone = company === "trifone";
   const isElectronics = company === "electronics";
-  const isItemCatalog = isTrifone || isElectronics;
+  const isPress = company === "press";
+  const isItemCatalog = isTrifone || isElectronics || isPress;
   const catalogMatches = dataCompany === company;
 
   function applyCatalog(snapshot, { asLoading = false } = {}) {
@@ -66,6 +73,7 @@ export function CfoProducts() {
     setLocations(snapshot.locations);
     setTrifoneFields(snapshot.trifoneFields);
     setElectronicsFields(snapshot.electronicsFields);
+    setPressFields(snapshot.pressFields);
     setTotal(snapshot.total);
     setPage(snapshot.page);
     setTotalPages(snapshot.totalPages);
@@ -78,6 +86,7 @@ export function CfoProducts() {
     setLocations([]);
     setTrifoneFields([]);
     setElectronicsFields([]);
+    setPressFields([]);
     setTotal(0);
     setPage(1);
     setTotalPages(1);
@@ -135,6 +144,7 @@ export function CfoProducts() {
         locations: data.locations || [],
         trifoneFields: data.trifoneFields || [],
         electronicsFields: data.electronicsFields || [],
+        pressFields: data.pressFields || [],
         total: data.total,
         page: data.page,
         totalPages: data.totalPages,
@@ -290,6 +300,12 @@ export function CfoProducts() {
         { key: "openingStock", label: "Opening Stock", type: "count" },
         { key: "closingStock", label: "Closing Stock", type: "count" },
       ];
+  const pressColumns = pressFields.length
+    ? pressFields
+    : [
+        { key: "openingStock", label: "Opening Stock", type: "count" },
+        { key: "closingStock", label: "Closing Stock", type: "count" },
+      ];
 
   return (
     <div className="page">
@@ -355,6 +371,13 @@ export function CfoProducts() {
                 Only product names are read — from an <strong>Item Name</strong> column
                 or names across the top row. Opening stock, closing stock, and other
                 columns are ignored.
+              </>
+            ) : isPress ? (
+              <>
+                Only the <strong>MATERIALS ITEM</strong> column is read.{" "}
+                <strong>Opening stock</strong>, <strong>closing stock</strong>, and all
+                other columns are ignored — the Press team updates in/out from their
+                dashboard.
               </>
             ) : (
               <>
@@ -471,7 +494,7 @@ export function CfoProducts() {
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>{isItemCatalog ? "Item Name" : "BookName"}</th>
+                    <th>{isPress ? "Materials Item" : isItemCatalog ? "Item Name" : "BookName"}</th>
                     {isTrifone
                       ? trifoneColumns.map((field) => (
                           <th key={field.key}>{field.label}</th>
@@ -480,6 +503,10 @@ export function CfoProducts() {
                         ? electronicsColumns.map((field) => (
                             <th key={field.key}>{field.label}</th>
                           ))
+                        : isPress
+                          ? pressColumns.map((field) => (
+                              <th key={field.key}>{field.label}</th>
+                            ))
                       : locations.map((loc) => (
                           <th key={loc}>
                             <span className="col-head">
@@ -521,6 +548,14 @@ export function CfoProducts() {
                                 )}
                               </td>
                             ))
+                          : isPress
+                            ? pressColumns.map((field) => (
+                                <td key={field.key} className="num-strong">
+                                  {formatCellValue(
+                                    product.pressData?.[field.key] ?? product[field.key]
+                                  )}
+                                </td>
+                              ))
                         : locations.map((loc) => (
                             <td key={loc}>
                               {Number(product.stock?.[loc] || 0).toLocaleString()}

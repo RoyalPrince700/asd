@@ -6,11 +6,12 @@ import { roleLabel } from "../utils/role.js";
 const STAFF_ROLES = [
   { id: "clerk", label: "Data clerk" },
   { id: "trifone", label: "Trifone" },
+  { id: "press", label: "Press" },
   { id: "accountant", label: "Accountant" },
 ];
 
 function assignmentValue(item) {
-  if (item.role === "accountant" || item.role === "trifone") return "";
+  if (item.role === "accountant" || item.role === "trifone" || item.role === "press") return "";
   if (isLocationlessCompany(item.assignedCompany)) return item.assignedCompany;
   if (item.location) return item.location;
   return "";
@@ -19,6 +20,7 @@ function assignmentValue(item) {
 function assignmentLabel(item) {
   if (item.role === "accountant") return "All locations";
   if (item.role === "trifone") return "Trifone Gadgets & Electronics";
+  if (item.role === "press") return "Press raw materials";
   const value = assignmentValue(item);
   if (isLocationlessCompany(value)) return companyLabel(value);
   if (value) return `APL · ${value}`;
@@ -90,6 +92,7 @@ export function CfoStaff() {
   const clerks = staff.filter((item) => item.role === "clerk");
   const accountants = staff.filter((item) => item.role === "accountant");
   const trifoneStaff = staff.filter((item) => item.role === "trifone");
+  const pressStaff = staff.filter((item) => item.role === "press");
   const assigned = clerks.filter((item) => assignmentValue(item));
   const pending = clerks.filter((item) => !assignmentValue(item));
   const trifoneCount = clerks.filter((item) => item.assignedCompany === "trifone").length;
@@ -104,7 +107,8 @@ export function CfoStaff() {
           <h1>Staff management</h1>
           <p className="lede tight">
             Assign staff to Trifone Gadgets, Trifone Electronics, or an APL location after they sign up.
-            Set role to <strong>Trifone</strong> for staff who manage both Trifone registers, or{" "}
+            Set role to <strong>Trifone</strong> for staff who manage both Trifone registers,{" "}
+            <strong>Press</strong> for raw materials in/out, or{" "}
             <strong>Accountant</strong> for CFO department staff who can update inventory across all
             companies and locations.
           </p>
@@ -129,6 +133,10 @@ export function CfoStaff() {
         <article className="kpi">
           <span>Trifone role</span>
           <strong>{trifoneStaff.length}</strong>
+        </article>
+        <article className="kpi">
+          <span>Press role</span>
+          <strong>{pressStaff.length}</strong>
         </article>
         <article className="kpi">
           <span>Trifone Gadgets</span>
@@ -194,6 +202,8 @@ export function CfoStaff() {
                       <span className="hint">All companies &amp; locations</span>
                     ) : item.role === "trifone" ? (
                       <span className="hint">Trifone Gadgets &amp; Electronics</span>
+                    ) : item.role === "press" ? (
+                      <span className="hint">Press raw materials</span>
                     ) : (
                       <>
                         <select
@@ -224,7 +234,7 @@ export function CfoStaff() {
                       : "—"}
                   </td>
                   <td>
-                    {item.role === "accountant" || item.role === "trifone" ? (
+                    {item.role === "accountant" || item.role === "trifone" || item.role === "press" ? (
                       <span className="ok">Active · {roleLabel(item.role)}</span>
                     ) : assignmentValue(item) ? (
                       <span className="ok">Active · {assignmentLabel(item)}</span>
@@ -250,6 +260,10 @@ export function CfoStaff() {
           <li>
             Set role to <strong>Trifone</strong> for staff who manage both Trifone Gadgets and Trifone
             Electronics (stock movement and inventory for those registers only).
+          </li>
+          <li>
+            Set role to <strong>Press</strong> for staff who update raw materials in/out for the
+            Press catalogue.
           </li>
           <li>
             Set role to <strong>Accountant</strong> for CFO department staff who need to update inventory

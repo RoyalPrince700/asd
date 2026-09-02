@@ -24,6 +24,14 @@ const electronicsDataSchema = new mongoose.Schema(
   { _id: false, strict: false }
 );
 
+const pressDataSchema = new mongoose.Schema(
+  {
+    openingStock: { type: Number, default: 0, min: 0 },
+    closingStock: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false, strict: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -43,6 +51,10 @@ const productSchema = new mongoose.Schema(
     },
     electronicsData: {
       type: electronicsDataSchema,
+      default: undefined,
+    },
+    pressData: {
+      type: pressDataSchema,
       default: undefined,
     },
     uploadedBy: {

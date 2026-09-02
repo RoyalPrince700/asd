@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { api } from "../api";
 import { useDialog } from "../context/DialogContext.jsx";
-import { companyLabel } from "../constants/companies";
+import { companyLabel, isPressCompany } from "../constants/companies";
 
 export function MovementUpload({
   company,
@@ -31,6 +31,8 @@ export function MovementUpload({
     setFileName("");
   }
 
+  const pressUpload = isPressCompany(company);
+
   async function onUpload(e) {
     e.preventDefault();
     if (!scopeReady || busy) return;
@@ -46,8 +48,10 @@ export function MovementUpload({
       : companyLabel(company, { short: true });
 
     const ok = await confirm({
-      title: "Upload stock movements",
-      message: `Import stock movements from the Excel file for ${scopeLabel} on ${date}? Products must already exist in the catalog. Opening balances that differ from the platform will be reconciled.`,
+      title: pressUpload ? "Upload raw materials" : "Upload stock movements",
+      message: pressUpload
+        ? `Import raw material quantities from the Excel file for ${scopeLabel} on ${date}? MATERIALS ITEM must match catalog products. QTY USED will be recorded as In for each row.`
+        : `Import stock movements from the Excel file for ${scopeLabel} on ${date}? Products must already exist in the catalog. Opening balances that differ from the platform will be reconciled.`,
       confirmLabel: "Upload",
     });
     if (!ok) return;
@@ -75,7 +79,9 @@ export function MovementUpload({
 
     if (result.errors?.length) {
       toast({
-        message: `${result.errors.length} row(s) were skipped. Check that product names match the catalog and ClBal = OpBal + RecQty − IssueQty.`,
+        message: pressUpload
+          ? `${result.errors.length} row(s) were skipped. Check that MATERIALS ITEM names match the Press catalog and QTY USED is greater than zero.`
+          : `${result.errors.length} row(s) were skipped. Check that product names match the catalog and ClBal = OpBal + RecQty − IssueQty.`,
         type: "info",
         duration: 8000,
       });
@@ -130,19 +136,30 @@ export function MovementUpload({
         </div>
 
         <p className="hint">
-          We read only these columns from your Excel file: <strong>Title Name</strong>,{" "}
-          <strong>OpBal</strong>, <strong>RecQty</strong>, <strong>IssueQty</strong>, and{" "}
-          <strong>ClBal</strong>. All other columns and rows above the header are ignored.
-          Title Name must match catalog products. If OpBal differs from the platform, the
-          uploaded opening balance is applied before recording the movement. All rows use
-          the date selected above ({date}).
+          {pressUpload ? (
+            <>
+              We read only <strong>MATERIALS ITEM</strong> and <strong>QTY USED</strong> from
+              your Excel file. Each QTY USED value is posted as <strong>In</strong> for that
+              material. Names must match the Press catalog. Rows with zero QTY USED are skipped.
+              All rows use the date selected above ({date}).
+            </>
+          ) : (
+            <>
+              We read only these columns from your Excel file: <strong>Title Name</strong>,{" "}
+              <strong>OpBal</strong>, <strong>RecQty</strong>, <strong>IssueQty</strong>, and{" "}
+              <strong>ClBal</strong>. All other columns and rows above the header are ignored.
+              Title Name must match catalog products. If OpBal differs from the platform, the
+              uploaded opening balance is applied before recording the movement. All rows use
+              the date selected above ({date}).
+            </>
+          )}
         </p>
 
         {error ? <p className="alert">{error}</p> : null}
 
         <div className="actions">
           <button type="submit" disabled={busy || !scopeReady || !fileName}>
-            {busy ? "Uploading…" : "Upload movements"}
+            {busy ? "Uploading…" : pressUpload ? "Upload raw materials" : "Upload movements"}
           </button>
         </div>
       </form>

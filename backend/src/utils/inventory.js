@@ -10,12 +10,15 @@ const {
   emptyAccessibleStock,
   emptyTrifoneData,
   emptyElectronicsData,
+  emptyPressData,
   normalizeTrifoneData,
   normalizeElectronicsData,
+  normalizePressData,
   isLocationlessCompany,
 } = require("../constants/companies");
 
 const NAME_HEADERS = [
+  /^materials\s*item$/i,
   /^item\s*name$/i,
   /^book\s*name$/i,
   /^product(\s*name)?$/i,
@@ -170,6 +173,9 @@ async function parseCatalogNamesExcel(buffer, company) {
   if (company === COMPANIES.ELECTRONICS) {
     return parseElectronicsNamesExcel(buffer);
   }
+  if (company === COMPANIES.PRESS) {
+    return parsePressNamesExcel(buffer);
+  }
   return parseProductNamesExcel(buffer);
 }
 
@@ -182,6 +188,9 @@ function namesToCatalogRows(names, company) {
       name,
       electronicsData: emptyElectronicsData(),
     }));
+  }
+  if (company === COMPANIES.PRESS) {
+    return names.map((name) => ({ name, pressData: emptyPressData() }));
   }
   return names.map((name) => ({ name, stock: emptyAccessibleStock() }));
 }
@@ -298,6 +307,59 @@ function findTrifoneHeaderRow(sheet) {
     if (hasItemName) return rowNumber;
   }
   return null;
+}
+
+function findPressHeaderRow(sheet) {
+  for (let rowNumber = 1; rowNumber <= 20; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    let hasMaterialsItem = false;
+    row.eachCell({ includeEmpty: false }, (cell) => {
+      if (/materials\s*item/i.test(normalizeHeader(cell.value))) {
+        hasMaterialsItem = true;
+      }
+    });
+    if (hasMaterialsItem) return rowNumber;
+  }
+  return null;
+}
+
+async function parsePressNamesExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) {
+    throw new Error("The Excel file has no worksheets.");
+  }
+
+  const headerRowNumber = findPressHeaderRow(sheet);
+  if (!headerRowNumber) {
+    return parseProductNamesExcel(buffer);
+  }
+
+  const headerRow = sheet.getRow(headerRowNumber);
+  const headers = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber] = normalizeHeader(cell.value);
+  });
+
+  const nameCol = headers.findIndex(
+    (header) => header && /^materials\s*item$/i.test(header)
+  );
+  if (nameCol < 1) {
+    return parseProductNamesExcel(buffer);
+  }
+
+  const names = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= headerRowNumber) return;
+
+    const name = cellText(row.getCell(nameCol).value);
+    if (!isCatalogProductName(name)) return;
+    names.push(name);
+  });
+
+  return [...new Set(names)];
 }
 
 function parseMoney(value) {
@@ -637,6 +699,10 @@ function catalogBaseStock(product) {
     return normalizeTrifoneData(product.trifoneData).openingStock;
   }
 
+  if (product.company === COMPANIES.PRESS) {
+    return normalizePressData(product.pressData).openingStock;
+  }
+
   return 0;
 }
 
@@ -680,7 +746,7 @@ async function getCurrentStock(productName, company, excludeRecordId = null, loc
 
   let baseStock = 0;
   const product = await Product.findOne({ name: productName, company }).select(
-    "stock trifoneData electronicsData company"
+    "stock trifoneData electronicsData pressData company"
   );
 
   if (location && product?.stock) {

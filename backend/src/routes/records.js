@@ -9,7 +9,7 @@ const {
   summarizeRecords,
   computeClosingBalance,
 } = require("../utils/stock");
-const { COMPANIES, isValidCompany, ACCESSIBLE_LOCATIONS, isLocationlessCompany, isTrifoneCompany, TRIFONE_ROLE_COMPANIES, companyLabel } = require("../constants/companies");
+const { COMPANIES, isValidCompany, ACCESSIBLE_LOCATIONS, isLocationlessCompany, isTrifoneCompany, isPressCompany, TRIFONE_ROLE_COMPANIES, companyLabel } = require("../constants/companies");
 const { isValidProductName } = require("../utils/products");
 const { getCurrentStock } = require("../utils/inventory");
 const RecordChange = require("../models/RecordChange");
@@ -20,7 +20,11 @@ const {
   attachPendingMeta,
 } = require("../utils/recordChanges");
 const { applyStockIdFilter, nextStockId } = require("../utils/stockId");
-const { parseMovementExcel, importMovementRows } = require("../utils/movementImport");
+const {
+  parseMovementExcel,
+  parsePressMovementExcel,
+  importMovementRows,
+} = require("../utils/movementImport");
 
 const router = express.Router();
 
@@ -100,6 +104,14 @@ function validateTrifoneRecordData(data) {
   return null;
 }
 
+function validatePressRecordData(data) {
+  if (!data.company || !isPressCompany(data.company)) {
+    return "Select Press raw materials.";
+  }
+  data.location = null;
+  return null;
+}
+
 function applyRecordsListScope(filter, user, query) {
   if (user.role === "clerk") {
     filter.enteredBy = user._id;
@@ -132,6 +144,13 @@ function applyRecordsListScope(filter, user, query) {
       if (!isTrifoneCompany(filter.company)) {
         return "Company must be Trifone Gadgets or Trifone Electronics.";
       }
+    }
+    return null;
+  }
+
+  if (user.role === "press") {
+    if (!filter.stockId) {
+      filter.company = COMPANIES.PRESS;
     }
     return null;
   }
@@ -226,6 +245,8 @@ router.get("/products", asyncHandler(async (req, res) => {
     } else {
       filter.company = { $in: TRIFONE_ROLE_COMPANIES };
     }
+  } else if (req.user.role === "press") {
+    filter.company = COMPANIES.PRESS;
   }
 
   const products = await Product.find(filter)
@@ -283,7 +304,7 @@ router.get("/my-summary", requireRole("clerk"), asyncHandler(async (req, res) =>
 
 router.post(
   "/upload",
-  requireRole("clerk", "accountant", "trifone"),
+  requireRole("clerk", "accountant", "trifone", "press"),
   upload.single("file"),
   asyncHandler(async (req, res) => {
     if (req.user.role === "clerk" && !isAssignedStaff(req.user)) {
@@ -309,6 +330,8 @@ router.post(
       scopeError = validateAccountantRecordData(data);
     } else if (req.user.role === "trifone") {
       scopeError = validateTrifoneRecordData(data);
+    } else if (req.user.role === "press") {
+      scopeError = validatePressRecordData(data);
     } else {
       if (!data.company || !isValidCompany(data.company)) {
         return res.status(400).json({ message: "Select a company." });
@@ -321,8 +344,11 @@ router.post(
     }
 
     let rows;
+    const pressFormat = data.company === COMPANIES.PRESS;
     try {
-      rows = await parseMovementExcel(req.file.buffer);
+      rows = pressFormat
+        ? await parsePressMovementExcel(req.file.buffer)
+        : await parseMovementExcel(req.file.buffer);
     } catch (err) {
       return res.status(400).json({ message: err.message });
     }
@@ -332,6 +358,7 @@ router.post(
       location: data.location,
       date: data.date,
       enteredBy: req.user._id,
+      pressFormat,
     });
 
     const parts = [`${results.imported} transaction${results.imported === 1 ? "" : "s"} imported.`];
@@ -351,7 +378,7 @@ router.post(
   })
 );
 
-router.post("/", requireRole("clerk", "accountant", "trifone"), asyncHandler(async (req, res) => {
+router.post("/", requireRole("clerk", "accountant", "trifone", "press"), asyncHandler(async (req, res) => {
   if (req.user.role === "clerk" && !isAssignedStaff(req.user)) {
     return res.status(403).json({
       message: "You have not been assigned yet. Contact CFO.",
@@ -369,6 +396,8 @@ router.post("/", requireRole("clerk", "accountant", "trifone"), asyncHandler(asy
     scopeError = validateAccountantRecordData(data);
   } else if (req.user.role === "trifone") {
     scopeError = validateTrifoneRecordData(data);
+  } else if (req.user.role === "press") {
+    scopeError = validatePressRecordData(data);
   } else {
     if (!data.company || !isValidCompany(data.company)) {
       return res.status(400).json({ message: "Select a company." });
@@ -411,7 +440,7 @@ router.post("/", requireRole("clerk", "accountant", "trifone"), asyncHandler(asy
   res.status(201).json({ record: populated });
 }));
 
-router.put("/:id", requireRole("clerk", "accountant", "trifone"), asyncHandler(async (req, res) => {
+router.put("/:id", requireRole("clerk", "accountant", "trifone", "press"), asyncHandler(async (req, res) => {
   if (req.user.role === "clerk" && !isAssignedStaff(req.user)) {
     return res.status(403).json({
       message: "You have not been assigned yet. Contact CFO.",
@@ -434,6 +463,12 @@ router.put("/:id", requireRole("clerk", "accountant", "trifone"), asyncHandler(a
     });
   }
 
+  if (req.user.role === "press" && !isPressCompany(existing.company)) {
+    return res.status(403).json({
+      message: "You can only edit Press raw material records.",
+    });
+  }
+
   const pending = await findPendingChange(existing._id);
   if (pending) {
     return res.status(409).json({
@@ -453,6 +488,8 @@ router.put("/:id", requireRole("clerk", "accountant", "trifone"), asyncHandler(a
     scopeError = validateAccountantRecordData(data);
   } else if (req.user.role === "trifone") {
     scopeError = validateTrifoneRecordData(data);
+  } else if (req.user.role === "press") {
+    scopeError = validatePressRecordData(data);
   } else {
     if (!data.company || !isValidCompany(data.company)) {
       return res.status(400).json({ message: "Select a company." });
@@ -511,7 +548,7 @@ router.put("/:id", requireRole("clerk", "accountant", "trifone"), asyncHandler(a
   });
 }));
 
-router.delete("/:id", requireRole("clerk", "accountant", "trifone", "cfo"), asyncHandler(async (req, res) => {
+router.delete("/:id", requireRole("clerk", "accountant", "trifone", "press", "cfo"), asyncHandler(async (req, res) => {
   const existing = await StockRecord.findById(req.params.id);
 
   if (!existing) {
@@ -525,6 +562,12 @@ router.delete("/:id", requireRole("clerk", "accountant", "trifone", "cfo"), asyn
   if (req.user.role === "trifone" && !isTrifoneCompany(existing.company)) {
     return res.status(403).json({
       message: "You can only delete Trifone Gadgets or Trifone Electronics records.",
+    });
+  }
+
+  if (req.user.role === "press" && !isPressCompany(existing.company)) {
+    return res.status(403).json({
+      message: "You can only delete Press raw material records.",
     });
   }
 

@@ -68,7 +68,7 @@ router.use(protect, requireRole("cfo"));
 router.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const staff = await User.find({ role: { $in: ["clerk", "accountant", "trifone"] } })
+    const staff = await User.find({ role: { $in: ["clerk", "accountant", "trifone", "press"] } })
       .sort({ createdAt: -1 })
       .select("-password");
     res.json({ staff: staff.map(publicStaff) });
@@ -94,28 +94,28 @@ router.patch(
       return res.status(404).json({ message: "Staff member not found" });
     }
 
-    if (!["clerk", "accountant", "trifone"].includes(user.role)) {
+    if (!["clerk", "accountant", "trifone", "press"].includes(user.role)) {
       console.warn("[staff PATCH] invalid role to manage", user.role);
       return res.status(400).json({
-        message: "Only clerk, accountant, or trifone accounts can be managed here.",
+        message: "Only clerk, accountant, trifone, or press accounts can be managed here.",
       });
     }
 
     const { assignment, location, assignedCompany, role } = req.body;
 
     if (role !== undefined) {
-      const allowed = ["clerk", "accountant", "trifone"];
+      const allowed = ["clerk", "accountant", "trifone", "press"];
       if (!allowed.includes(role)) {
-        return res.status(400).json({ message: "Role must be clerk, accountant, or trifone." });
+        return res.status(400).json({ message: "Role must be clerk, accountant, trifone, or press." });
       }
       user.role = role;
-      if (role === "accountant" || role === "trifone") {
+      if (role === "accountant" || role === "trifone" || role === "press") {
         user.assignedCompany = null;
         user.location = undefined;
       }
     }
 
-    if (user.role === "accountant" || user.role === "trifone") {
+    if (user.role === "accountant" || user.role === "trifone" || user.role === "press") {
       await user.save();
       console.log(`[staff PATCH] saved ${user.role}`, publicStaff(user));
       return res.json({ staff: publicStaff(user) });

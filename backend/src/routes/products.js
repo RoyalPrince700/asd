@@ -11,13 +11,16 @@ const {
   ACCESSIBLE_LOCATIONS,
   TRIFONE_CATALOG_FIELDS,
   ELECTRONICS_CATALOG_FIELDS,
+  PRESS_CATALOG_FIELDS,
   emptyAccessibleStock,
   emptyTrifoneData,
   emptyElectronicsData,
   normalizeTrifoneData,
   normalizeElectronicsData,
+  normalizePressData,
   isLocationlessCompany,
   isTrifoneCompany,
+  isPressCompany,
 } = require("../constants/companies");
 const {
   parseCatalogNamesExcel,
@@ -73,6 +76,10 @@ function visibleElectronicsFields() {
   return ELECTRONICS_CATALOG_FIELDS;
 }
 
+function visiblePressFields() {
+  return PRESS_CATALOG_FIELDS;
+}
+
 function formatAccessibleProduct(row, visibleLocations = ACCESSIBLE_LOCATIONS) {
   const stock = row.stock?.toObject?.() || row.stock || emptyAccessibleStock();
   const allTotal = visibleLocations.reduce(
@@ -121,6 +128,23 @@ function formatElectronicsProduct(row, movementMap = null) {
   };
 }
 
+function formatPressProduct(row, movementMap = null) {
+  const pressData = normalizePressData(row.pressData);
+  if (movementMap) {
+    const net = movementMap.get(row.name) || 0;
+    pressData.closingStock = Math.max(0, pressData.openingStock + net);
+  }
+
+  return {
+    _id: row._id,
+    name: row.name,
+    company: row.company,
+    pressData,
+    openingStock: pressData.openingStock,
+    closingStock: pressData.closingStock,
+  };
+}
+
 function formatProduct(row, { live = false, movementMap = null, visibleLocations = ACCESSIBLE_LOCATIONS } = {}) {
   if (row.company === COMPANIES.TRIFONE) {
     const product = formatTrifoneProduct(row, live && movementMap ? movementMap : null);
@@ -130,6 +154,12 @@ function formatProduct(row, { live = false, movementMap = null, visibleLocations
 
   if (row.company === COMPANIES.ELECTRONICS) {
     const product = formatElectronicsProduct(row, live && movementMap ? movementMap : null);
+    if (live && movementMap) product.live = true;
+    return product;
+  }
+
+  if (row.company === COMPANIES.PRESS) {
+    const product = formatPressProduct(row, live && movementMap ? movementMap : null);
     if (live && movementMap) product.live = true;
     return product;
   }
@@ -164,10 +194,13 @@ function catalogOpeningFromRow(row) {
   if (row.company === COMPANIES.TRIFONE) {
     return normalizeTrifoneData(row.trifoneData).openingStock;
   }
+  if (row.company === COMPANIES.PRESS) {
+    return normalizePressData(row.pressData).openingStock;
+  }
   return 0;
 }
 
-router.get("/my-inventory", requireRole("clerk", "accountant", "trifone"), asyncHandler(async (req, res) => {
+router.get("/my-inventory", requireRole("clerk", "accountant", "trifone", "press"), asyncHandler(async (req, res) => {
   let company;
   let location;
 
@@ -194,6 +227,9 @@ router.get("/my-inventory", requireRole("clerk", "accountant", "trifone"), async
       });
     }
     location = null;
+  } else if (req.user.role === "press") {
+    company = COMPANIES.PRESS;
+    location = null;
   } else {
     const assignment = resolveStaffAssignment(req.user);
     if (!assignment) {
@@ -219,7 +255,7 @@ router.get("/my-inventory", requireRole("clerk", "accountant", "trifone"), async
     .sort({ name: 1 })
     .skip((page - 1) * limit)
     .limit(limit)
-    .select("name company stock trifoneData electronicsData");
+    .select("name company stock trifoneData electronicsData pressData");
 
   const movementMap = await buildMovementMap(company, location);
 
@@ -279,7 +315,7 @@ router.get("/", asyncHandler(async (req, res) => {
       .sort({ name: 1 })
       .skip((safePage - 1) * safeLimit)
       .limit(safeLimit)
-      .select("name company stock trifoneData electronicsData");
+      .select("name company stock trifoneData electronicsData pressData");
 
     let movementMap = null;
     if (live && company) {
@@ -293,6 +329,8 @@ router.get("/", asyncHandler(async (req, res) => {
       company === COMPANIES.TRIFONE ? visibleTrifoneFields() : [];
     const electronicsFields =
       company === COMPANIES.ELECTRONICS ? visibleElectronicsFields() : [];
+    const pressFields =
+      company === COMPANIES.PRESS ? visiblePressFields() : [];
 
     return res.json({
       products: rows.map((row) =>
@@ -307,6 +345,7 @@ router.get("/", asyncHandler(async (req, res) => {
       locations,
       trifoneFields,
       electronicsFields,
+      pressFields,
       hiddenColumns,
     });
   }
@@ -362,7 +401,9 @@ router.get("/template", requireRole("cfo"), asyncHandler(async (req, res) => {
       ? "ITEM NAME"
       : company === COMPANIES.ELECTRONICS
         ? "Item Name"
-        : "BookName";
+        : company === COMPANIES.PRESS
+          ? "MATERIALS ITEM"
+          : "BookName";
 
   const sheet = workbook.addWorksheet("Catalog");
   sheet.columns = [
@@ -394,6 +435,7 @@ function resolveUploadMode(value) {
 function catalogSetFields(company, row) {
   if (company === COMPANIES.TRIFONE) return { trifoneData: row.trifoneData };
   if (company === COMPANIES.ELECTRONICS) return { electronicsData: row.electronicsData };
+  if (company === COMPANIES.PRESS) return { pressData: row.pressData };
   return { stock: row.stock };
 }
 
@@ -504,6 +546,8 @@ router.post(
             ? "No product names found. Use a column headed ITEM NAME or Item Name."
             : company === COMPANIES.ELECTRONICS
               ? "No product names found. Use a column headed Item Name, or product names across the top row."
+            : company === COMPANIES.PRESS
+              ? "No product names found. Use a column headed MATERIALS ITEM."
             : "No product names found. Use a column headed BookName or Item Name.",
       });
     }
@@ -525,7 +569,7 @@ router.delete(
 
     const hiddenColumns = await getHiddenColumns(company);
 
-    if (company === COMPANIES.TRIFONE || company === COMPANIES.ELECTRONICS) {
+    if (company === COMPANIES.TRIFONE || company === COMPANIES.ELECTRONICS || company === COMPANIES.PRESS) {
       return res.status(400).json({
         message: "Opening Stock and Closing Stock columns cannot be removed.",
       });

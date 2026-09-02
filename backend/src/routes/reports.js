@@ -28,6 +28,7 @@ function enteredByLabel(user) {
   if (!user?.name) return "";
   if (user.role === "accountant") return `${user.name} (Accountant)`;
   if (user.role === "trifone") return `${user.name} (Trifone)`;
+  if (user.role === "press") return `${user.name} (Press)`;
   return user.name;
 }
 

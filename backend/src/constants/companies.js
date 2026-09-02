@@ -2,18 +2,21 @@ const COMPANIES = {
   ACCESSIBLE: "accessible",
   TRIFONE: "trifone",
   ELECTRONICS: "electronics",
+  PRESS: "press",
 };
 
 const COMPANY_LABELS = {
   [COMPANIES.ACCESSIBLE]: "Accessible Publishers Limited",
   [COMPANIES.TRIFONE]: "Trifone Gadgets",
   [COMPANIES.ELECTRONICS]: "Trifone Electronics",
+  [COMPANIES.PRESS]: "Press",
 };
 
 const COMPANY_SHORT_LABELS = {
   [COMPANIES.ACCESSIBLE]: "APL",
   [COMPANIES.TRIFONE]: "Trifone Gadgets",
   [COMPANIES.ELECTRONICS]: "Trifone Electronics",
+  [COMPANIES.PRESS]: "Press",
 };
 
 const COMPANY_OPTIONS = [
@@ -32,11 +35,20 @@ const COMPANY_OPTIONS = [
     label: "Trifone Electronics",
     shortLabel: "Trifone Electronics",
   },
+  {
+    id: COMPANIES.PRESS,
+    label: "Press (Raw Materials)",
+    shortLabel: "Press",
+  },
 ];
 
 function isLocationlessCompany(value) {
   const company = String(value || "").trim().toLowerCase();
-  return company === COMPANIES.TRIFONE || company === COMPANIES.ELECTRONICS;
+  return (
+    company === COMPANIES.TRIFONE ||
+    company === COMPANIES.ELECTRONICS ||
+    company === COMPANIES.PRESS
+  );
 }
 
 const TRIFONE_ROLE_COMPANIES = [COMPANIES.TRIFONE, COMPANIES.ELECTRONICS];
@@ -44,6 +56,10 @@ const TRIFONE_ROLE_COMPANIES = [COMPANIES.TRIFONE, COMPANIES.ELECTRONICS];
 function isTrifoneCompany(value) {
   const company = String(value || "").trim().toLowerCase();
   return TRIFONE_ROLE_COMPANIES.includes(company);
+}
+
+function isPressCompany(value) {
+  return String(value || "").trim().toLowerCase() === COMPANIES.PRESS;
 }
 
 function isValidCompany(value) {
@@ -70,6 +86,11 @@ const TRIFONE_CATALOG_FIELDS = [
 ];
 
 const ELECTRONICS_CATALOG_FIELDS = [
+  { key: "openingStock", label: "Opening Stock", type: "count" },
+  { key: "closingStock", label: "Closing Stock", type: "count" },
+];
+
+const PRESS_CATALOG_FIELDS = [
   { key: "openingStock", label: "Opening Stock", type: "count" },
   { key: "closingStock", label: "Closing Stock", type: "count" },
 ];
@@ -206,6 +227,17 @@ function emptyElectronicsData() {
   return { openingStock: 0, closingStock: 0 };
 }
 
+function normalizePressData(data) {
+  const raw = data?.toObject?.() || data || {};
+  const openingStock = Number(raw.openingStock ?? 0) || 0;
+  const closingStock = Number(raw.closingStock ?? openingStock) || 0;
+  return { openingStock, closingStock };
+}
+
+function emptyPressData() {
+  return { openingStock: 0, closingStock: 0 };
+}
+
 module.exports = {
   COMPANIES,
   COMPANY_LABELS,
@@ -213,6 +245,7 @@ module.exports = {
   COMPANY_OPTIONS,
   isLocationlessCompany,
   isTrifoneCompany,
+  isPressCompany,
   TRIFONE_ROLE_COMPANIES,
   isValidCompany,
   resolveCompany,
@@ -224,9 +257,12 @@ module.exports = {
   TRIFONE_FIELD_LOOKUP,
   TRIFONE_HEADER_PATTERNS,
   ELECTRONICS_CATALOG_FIELDS,
+  PRESS_CATALOG_FIELDS,
   normalizeTrifoneData,
   normalizeElectronicsData,
+  normalizePressData,
   emptyAccessibleStock,
   emptyTrifoneData,
   emptyElectronicsData,
+  emptyPressData,
 };

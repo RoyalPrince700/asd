@@ -16,6 +16,11 @@ export const COMPANY_OPTIONS = [
     label: "Trifone Electronics",
     shortLabel: "Trifone Electronics",
   },
+  {
+    id: "press",
+    label: "Press (Raw Materials)",
+    shortLabel: "Press",
+  },
 ];
 
 export const TRIFONE_ROLE_COMPANY_OPTIONS = COMPANY_OPTIONS.filter(
@@ -26,8 +31,12 @@ export function isTrifoneCompany(id) {
   return id === "trifone" || id === "electronics";
 }
 
+export function isPressCompany(id) {
+  return id === "press";
+}
+
 export function isLocationlessCompany(id) {
-  return isTrifoneCompany(id);
+  return isTrifoneCompany(id) || isPressCompany(id);
 }
 
 export function companyLabel(id, { short = false } = {}) {

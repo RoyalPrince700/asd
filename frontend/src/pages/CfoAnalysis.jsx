@@ -106,6 +106,7 @@ export function CfoAnalysis() {
   const showApl = !applied.company || applied.company === "accessible";
   const showTrifone = !applied.company || applied.company === "trifone";
   const showElectronics = !applied.company || applied.company === "electronics";
+  const showPress = !applied.company || applied.company === "press";
 
   async function load(params = applied) {
     setLoading(true);
@@ -167,6 +168,7 @@ export function CfoAnalysis() {
   const apl = data?.accessible;
   const trf = data?.trifone;
   const elec = data?.electronics;
+  const prs = data?.press;
 
   return (
     <div className="page">
@@ -175,7 +177,7 @@ export function CfoAnalysis() {
           <p className="eyebrow">Chief Financial Officer</p>
           <h1>Analysis</h1>
           <p className="lede tight">
-            Inventory, revenue, and margin insights across APL, Trifone Gadgets, and Trifone Electronics — drawn from live catalogues and ledger movement.
+            Inventory, revenue, and margin insights across APL, Trifone Gadgets, Trifone Electronics, and Press raw materials — drawn from live catalogues and ledger movement.
           </p>
         </div>
         <div className="export-row">
@@ -605,6 +607,49 @@ export function CfoAnalysis() {
                       </thead>
                       <tbody>
                         {elec.topProducts.map((row) => (
+                          <tr key={row.fullName}>
+                            <td>{row.fullName}</td>
+                            <td className="num-strong">{fmt(row.currentStock)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
+          {showPress && prs ? (
+            <section className="panel">
+              <div className="section-head">
+                <h2>{companyLabel("press")}</h2>
+                <span className="hint">Raw materials — live stock</span>
+              </div>
+              <div className="kpi-grid">
+                <Kpi label="Items in catalogue" value={fmt(prs.summary.totalProducts)} />
+                <Kpi
+                  label="Current stock"
+                  value={fmt(prs.summary.totalCurrentStock)}
+                  featured
+                />
+                <Kpi label="Out of stock items" value={fmt(prs.summary.outOfStock)} tone="down" />
+                <Kpi label="Critical stock" value={fmt(prs.summary.criticalStockCount)} />
+                <Kpi label="Low stock" value={fmt(prs.summary.lowStockCount)} />
+              </div>
+              {prs.topProducts?.length ? (
+                <>
+                  <h3 className="subhead">Top materials by current stock</h3>
+                  <div className="table-wrap flush">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Materials Item</th>
+                          <th>Current stock</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {prs.topProducts.map((row) => (
                           <tr key={row.fullName}>
                             <td>{row.fullName}</td>
                             <td className="num-strong">{fmt(row.currentStock)}</td>

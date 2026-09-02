@@ -10,6 +10,7 @@ const { nextStockIds } = require("./stockId");
 const TITLE_HEADERS = [
   /^title\s*name$/i,
   /^book\s*name$/i,
+  /^materials\s*item$/i,
   /^item\s*name$/i,
   /^product(\s*name)?$/i,
   /^name$/i,
@@ -29,6 +30,9 @@ const ISSUE_QTY_HEADERS = [
   /^issue(s)?$/i,
 ];
 const CL_BAL_HEADERS = [/^cl\s*bal$/i, /^clbal$/i, /^closing\s*bal(ance)?$/i];
+
+const PRESS_ITEM_HEADERS = [/^materials\s*item$/i];
+const QTY_USED_HEADERS = [/^qty\s*used$/i];
 
 function cellText(value) {
   if (value == null) return "";
@@ -100,6 +104,26 @@ function findMovementHeaderRow(sheet) {
     }
   }
   return null;
+}
+
+function findPressMovementHeaderRow(sheet) {
+  for (let rowNumber = 1; rowNumber <= 100; rowNumber += 1) {
+    const headers = readRowHeaders(sheet, rowNumber);
+    const itemCol = findColumn(headers, PRESS_ITEM_HEADERS);
+    const qtyCol = findColumn(headers, QTY_USED_HEADERS);
+
+    if (itemCol >= 1 && qtyCol >= 1) {
+      return { rowNumber, itemCol, qtyCol };
+    }
+  }
+  return null;
+}
+
+function pickPressMovementSheet(workbook) {
+  for (const ws of workbook.worksheets) {
+    if (findPressMovementHeaderRow(ws)) return ws;
+  }
+  return workbook.worksheets[0] || null;
 }
 
 function pickMovementSheet(workbook) {
@@ -182,9 +206,55 @@ async function parseMovementExcel(buffer) {
   return rows;
 }
 
+async function parsePressMovementExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer);
+  } catch (err) {
+    throw new Error(
+      "Could not read the Excel file. Save it as .xlsx in WPS/Excel and try again."
+    );
+  }
+
+  const sheet = pickPressMovementSheet(workbook);
+  if (!sheet) {
+    throw new Error("The Excel file has no worksheets.");
+  }
+
+  const header = findPressMovementHeaderRow(sheet);
+  if (!header) {
+    throw new Error(
+      `Could not find a header row with MATERIALS ITEM and QTY USED on sheet "${sheet.name}". Scanned: ${describeScannedHeaders(sheet)}`
+    );
+  }
+
+  const { rowNumber: headerRowNumber, itemCol, qtyCol } = header;
+
+  const rows = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= headerRowNumber) return;
+
+    const titleName = cellText(row.getCell(itemCol).value);
+    if (!titleName) return;
+
+    rows.push({
+      rowNumber,
+      titleName,
+      recQty: parseCount(row.getCell(qtyCol).value),
+      issueQty: 0,
+    });
+  });
+
+  if (!rows.length) {
+    throw new Error("No material rows found in the Excel file.");
+  }
+
+  return rows;
+}
+
 async function buildProductLookup(company) {
   const products = await Product.find({ company }).select(
-    "name stock trifoneData electronicsData company"
+    "name stock trifoneData electronicsData pressData company"
   );
   const lookup = new Map();
   const byName = new Map();
@@ -205,6 +275,9 @@ function catalogBaseStock(product, location) {
   }
   if (product.company === COMPANIES.TRIFONE) {
     return Number(product.trifoneData?.currentStock) || 0;
+  }
+  if (product.company === COMPANIES.PRESS) {
+    return Number(product.pressData?.openingStock) || 0;
   }
   return 0;
 }
@@ -229,6 +302,14 @@ function applyCatalogDelta(product, location, delta) {
     product.electronicsData.currentStock = Math.max(
       0,
       (Number(product.electronicsData.currentStock) || 0) + delta
+    );
+    return;
+  }
+  if (product.company === COMPANIES.PRESS) {
+    product.pressData = product.pressData || {};
+    product.pressData.openingStock = Math.max(
+      0,
+      (Number(product.pressData.openingStock) || 0) + delta
     );
   }
 }
@@ -260,6 +341,40 @@ async function importMovementRows(rows, options) {
       continue;
     }
 
+    const product = byName.get(productName);
+    const catalogDelta = catalogUpdates.get(productName) || 0;
+    const movementNet = movementMap.get(productName) || 0;
+    const currentStock = Math.max(
+      0,
+      catalogBaseStock(product, location) + catalogDelta + movementNet
+    );
+
+    if (options.pressFormat) {
+      if (row.recQty === 0) {
+        results.skipped += 1;
+        continue;
+      }
+
+      const openingBalance = currentStock;
+      const closingBalance = openingBalance + row.recQty;
+
+      pendingRecords.push({
+        productName,
+        company,
+        location: isLocationlessCompany(company) ? null : location,
+        date,
+        openingBalance,
+        inbound: row.recQty,
+        outbound: 0,
+        stockReceived: 0,
+        stockOut: 0,
+        remark,
+        closingBalance,
+        enteredBy,
+      });
+      continue;
+    }
+
     const expectedClosing = row.opBal + row.recQty - row.issueQty;
     if (row.clBal !== expectedClosing) {
       results.skipped += 1;
@@ -280,14 +395,6 @@ async function importMovementRows(rows, options) {
       });
       continue;
     }
-
-    const product = byName.get(productName);
-    const catalogDelta = catalogUpdates.get(productName) || 0;
-    const movementNet = movementMap.get(productName) || 0;
-    const currentStock = Math.max(
-      0,
-      catalogBaseStock(product, location) + catalogDelta + movementNet
-    );
 
     if (row.recQty === 0 && row.issueQty === 0 && row.opBal === currentStock) {
       results.skipped += 1;
@@ -353,6 +460,13 @@ async function importMovementRows(rows, options) {
             },
           },
         });
+      } else if (product.company === COMPANIES.PRESS) {
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: product._id },
+            update: { $set: { "pressData.openingStock": product.pressData.openingStock } },
+          },
+        });
       }
     }
     if (bulkOps.length) {
@@ -375,5 +489,6 @@ async function importMovementRows(rows, options) {
 
 module.exports = {
   parseMovementExcel,
+  parsePressMovementExcel,
   importMovementRows,
 };
