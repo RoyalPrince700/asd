@@ -29,6 +29,9 @@ const NAME_HEADERS = [
 const NON_NAME_HEADERS =
   /^(opening|closing)(\s*(stock|balance|inventory|qty|quantity))?$/i;
 
+const SALE_PRICE_HEADER = /^sale\s*price$/i;
+const COST_PRICE_HEADER = /^cost\s*price/i;
+
 const CATALOG_SKIP_ROW =
   /^(total|sub\s*totals?|grand\s*total|key\s*performance|reporting\s*period)$/i;
 
@@ -73,6 +76,17 @@ function findNameColumn(headers) {
   return col >= 1 ? col : 1;
 }
 
+function parsePrice(value) {
+  const text = cellText(value);
+  if (!text || text === "-") return 0;
+  const n = Number(String(text).replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+function findSalePriceColumn(headers) {
+  return headers.findIndex((h) => h && SALE_PRICE_HEADER.test(h));
+}
+
 async function parseProductNamesExcel(buffer) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
@@ -105,6 +119,51 @@ async function parseProductNamesExcel(buffer) {
   });
 
   return [...new Set(names)];
+}
+
+/** Accessible Publishers catalog: BookName + optional Sale Price. */
+async function parseAccessibleCatalogExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) {
+    throw new Error("The Excel file has no worksheets.");
+  }
+
+  const headerRow = sheet.getRow(1);
+  const headers = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber] = cellText(cell.value);
+  });
+
+  const nameCol = findNameColumn(headers);
+  const salePriceCol = findSalePriceColumn(headers);
+
+  const byName = new Map();
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) {
+      const header = cellText(row.getCell(nameCol).value);
+      if (isNameHeader(header)) return;
+    }
+
+    const name = cellText(row.getCell(nameCol).value);
+    if (!name) return;
+    if (rowNumber === 1 && isNameHeader(name)) return;
+    if (!isCatalogProductName(name)) return;
+    if (byName.has(name)) return;
+
+    const salePrice =
+      salePriceCol >= 1 ? parsePrice(row.getCell(salePriceCol).value) : 0;
+
+    byName.set(name, {
+      name,
+      salePrice,
+      stock: emptyAccessibleStock(),
+    });
+  });
+
+  return [...byName.values()];
 }
 
 async function parseTrifoneNamesExcel(buffer) {
@@ -144,6 +203,63 @@ async function parseTrifoneNamesExcel(buffer) {
   });
 
   return [...new Set(names)];
+}
+
+/** Trifone Gadgets catalog: ITEM NAME + optional Cost Price. */
+async function parseTrifoneCatalogExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) {
+    throw new Error("The Excel file has no worksheets.");
+  }
+
+  const headerRowNumber = findTrifoneHeaderRow(sheet) || 1;
+  const headerRow = sheet.getRow(headerRowNumber);
+  const headers = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber] = normalizeHeader(cell.value);
+  });
+
+  let nameCol = headers.findIndex(
+    (header) => header && /^item\s*name$/i.test(header)
+  );
+  if (nameCol < 1) {
+    nameCol = findNameColumn(headers);
+  }
+
+  const costPriceCol = headers.findIndex(
+    (header) => header && COST_PRICE_HEADER.test(header)
+  );
+
+  const byName = new Map();
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber < headerRowNumber) return;
+    if (rowNumber === headerRowNumber) {
+      const header = cellText(row.getCell(nameCol).value);
+      if (isNameHeader(header) || /^item\s*name$/i.test(normalizeHeader(header))) {
+        return;
+      }
+    }
+
+    const name = cellText(row.getCell(nameCol).value);
+    if (!isTrifoneDataRow(name)) return;
+    if (byName.has(name)) return;
+
+    const costPrice =
+      costPriceCol >= 1 ? parsePrice(row.getCell(costPriceCol).value) : 0;
+
+    byName.set(name, {
+      name,
+      trifoneData: {
+        ...emptyTrifoneData(),
+        costPrice,
+      },
+    });
+  });
+
+  return [...byName.values()];
 }
 
 async function parseElectronicsNamesExcel(buffer) {
@@ -192,7 +308,11 @@ function namesToCatalogRows(names, company) {
   if (company === COMPANIES.PRESS) {
     return names.map((name) => ({ name, pressData: emptyPressData() }));
   }
-  return names.map((name) => ({ name, stock: emptyAccessibleStock() }));
+  return names.map((name) => ({
+    name,
+    salePrice: 0,
+    stock: emptyAccessibleStock(),
+  }));
 }
 
 function parseCount(value) {
@@ -324,6 +444,12 @@ function findPressHeaderRow(sheet) {
 }
 
 async function parsePressNamesExcel(buffer) {
+  const rows = await parsePressCatalogExcel(buffer);
+  return rows.map((row) => row.name);
+}
+
+/** Press catalog: MATERIALS ITEM + QTY USED / Opening Stock / Closing Stock. */
+async function parsePressCatalogExcel(buffer) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
 
@@ -332,34 +458,68 @@ async function parsePressNamesExcel(buffer) {
     throw new Error("The Excel file has no worksheets.");
   }
 
-  const headerRowNumber = findPressHeaderRow(sheet);
-  if (!headerRowNumber) {
-    return parseProductNamesExcel(buffer);
-  }
-
+  const headerRowNumber = findPressHeaderRow(sheet) || 1;
   const headerRow = sheet.getRow(headerRowNumber);
   const headers = [];
   headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
     headers[colNumber] = normalizeHeader(cell.value);
   });
 
-  const nameCol = headers.findIndex(
+  let nameCol = headers.findIndex(
     (header) => header && /^materials\s*item$/i.test(header)
   );
   if (nameCol < 1) {
-    return parseProductNamesExcel(buffer);
+    nameCol = findNameColumn(headers);
   }
 
-  const names = [];
+  const qtyUsedCol = headers.findIndex(
+    (header) => header && /^qty\s*used$/i.test(header)
+  );
+  const openingCol = headers.findIndex(
+    (header) =>
+      header &&
+      (/^opening\s*stock$/i.test(header) || /^opening\s*bal(ance)?$/i.test(header))
+  );
+  const closingCol = headers.findIndex(
+    (header) =>
+      header &&
+      (/^closing\s*stock$/i.test(header) || /^closing\s*bal(ance)?$/i.test(header))
+  );
+
+  const byName = new Map();
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber <= headerRowNumber) return;
+    if (rowNumber <= headerRowNumber) {
+      const header = cellText(row.getCell(nameCol).value);
+      if (isNameHeader(header) || /^materials\s*item$/i.test(normalizeHeader(header))) {
+        return;
+      }
+      if (rowNumber === headerRowNumber) return;
+    }
 
     const name = cellText(row.getCell(nameCol).value);
-    if (!isCatalogProductName(name)) return;
-    names.push(name);
+    if (!name || !isCatalogProductName(name)) return;
+    if (byName.has(name)) return;
+
+    let openingStock = 0;
+    let closingStock = 0;
+
+    if (openingCol >= 1 || closingCol >= 1) {
+      openingStock = openingCol >= 1 ? parseCount(row.getCell(openingCol).value) : 0;
+      closingStock =
+        closingCol >= 1 ? parseCount(row.getCell(closingCol).value) : openingStock;
+    } else if (qtyUsedCol >= 1) {
+      const qty = parseCount(row.getCell(qtyUsedCol).value);
+      openingStock = qty;
+      closingStock = qty;
+    }
+
+    byName.set(name, {
+      name,
+      pressData: { openingStock, closingStock },
+    });
   });
 
-  return [...new Set(names)];
+  return [...byName.values()];
 }
 
 function parseMoney(value) {
@@ -775,6 +935,9 @@ async function buildStockSnapshot() {
 
 module.exports = {
   parseProductNamesExcel,
+  parseAccessibleCatalogExcel,
+  parseTrifoneCatalogExcel,
+  parsePressCatalogExcel,
   parseCatalogNamesExcel,
   namesToCatalogRows,
   parseAccessibleInventoryExcel,

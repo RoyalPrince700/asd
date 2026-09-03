@@ -123,7 +123,7 @@ export default function App() {
           <Route
             path="/overview"
             element={
-              <ProtectedRoute role="cfo">
+              <ProtectedRoute roles={["cfo", "md"]}>
                 <CfoHome />
               </ProtectedRoute>
             }
@@ -131,7 +131,7 @@ export default function App() {
           <Route
             path="/ledger"
             element={
-              <ProtectedRoute role="cfo">
+              <ProtectedRoute roles={["cfo", "md"]}>
                 <CfoLedger />
               </ProtectedRoute>
             }
@@ -147,7 +147,7 @@ export default function App() {
           <Route
             path="/products"
             element={
-              <ProtectedRoute role="cfo">
+              <ProtectedRoute roles={["cfo", "md"]}>
                 <CfoProducts />
               </ProtectedRoute>
             }
@@ -155,7 +155,7 @@ export default function App() {
           <Route
             path="/analysis"
             element={
-              <ProtectedRoute role="cfo">
+              <ProtectedRoute roles={["cfo", "md"]}>
                 <CfoAnalysis />
               </ProtectedRoute>
             }

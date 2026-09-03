@@ -3,8 +3,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import { api } from "../api";
 import { CfoRemarkTag } from "../components/RemarkTag.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel, isLocationlessCompany } from "../constants/companies";
-import { enteredByLabel } from "../utils/role.js";
+import { enteredByLabel, roleLabel } from "../utils/role.js";
 import { useDialog } from "../context/DialogContext.jsx";
 
 const PAGE_SIZE = 50;
@@ -27,6 +28,7 @@ function filtersFromSearch(searchParams) {
 }
 
 export function CfoLedger() {
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const { confirm, toast } = useDialog();
   const initialFilters = filtersFromSearch(searchParams);
@@ -120,7 +122,7 @@ export function CfoLedger() {
     <div className="page">
       <header className="page-head split">
         <div>
-          <p className="eyebrow">Chief Financial Officer</p>
+          <p className="eyebrow">{roleLabel(user?.role)}</p>
           <h1>Ledger lines</h1>
           <p className="lede tight">
             Live feed of clerk postings. Filter by stock ID, company, product, location, or date range,

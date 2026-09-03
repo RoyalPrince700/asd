@@ -59,11 +59,15 @@ router.patch(
     }
 
     if (role !== undefined) {
-      const allowed = ["clerk", "cfo", "accountant", "admin"];
+      const allowed = ["clerk", "cfo", "md", "accountant", "admin"];
       if (!allowed.includes(role)) {
         return res.status(400).json({ message: "Invalid role" });
       }
       user.role = role;
+      if (role === "md" || role === "cfo" || role === "admin") {
+        user.assignedCompany = null;
+        user.location = undefined;
+      }
     }
 
     await user.save();

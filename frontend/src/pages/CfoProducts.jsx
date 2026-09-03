@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { api } from "../api";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
+import { roleLabel } from "../utils/role.js";
 
 const PAGE_SIZE = 50;
 
@@ -32,12 +34,27 @@ function formatCellValue(value) {
   return Number(value || 0).toLocaleString();
 }
 
+function formatSalePrice(value) {
+  return Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
 function catalogCacheKey(companyId, searchValue = "") {
   return `${companyId}::${searchValue}`;
 }
 
+const LOW_STOCK_THRESHOLD = 10;
+
+function isLowStock(value) {
+  return Number(value || 0) < LOW_STOCK_THRESHOLD;
+}
+
 export function CfoProducts() {
+  const { user } = useAuth();
   const { confirm, toast } = useDialog();
+  const canManageCatalog = user?.role === "cfo";
   const [company, setCompany] = useState("accessible");
   const [products, setProducts] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -52,6 +69,7 @@ export function CfoProducts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [deletingColumn, setDeletingColumn] = useState(null);
@@ -192,7 +210,11 @@ export function CfoProducts() {
         title: isReplace ? "Replace catalog" : "Update catalog",
         message: isReplace
           ? `This will delete all ${total.toLocaleString()} existing products for ${activeCompany.label} and replace them with the uploaded file only. Continue?`
-          : `This will add new products from the file and reset matching products to zero stock. Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`,
+          : company === "accessible"
+            ? `This will add new products from the file and update matching ones (including Sale Price; stock resets to zero). Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`
+            : company === "trifone"
+              ? `This will add new products from the file and update matching ones (including Cost Price; stock resets to zero). Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`
+              : `This will add new products from the file and reset matching products to zero stock. Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`,
         confirmLabel: isReplace ? "Replace catalog" : "Update catalog",
         variant: isReplace ? "danger" : "default",
       }))
@@ -231,6 +253,34 @@ export function CfoProducts() {
       setError(err.message);
     } finally {
       setDownloading(false);
+    }
+  }
+
+  async function resetCompanyStock() {
+    if (!activeCompany.ready) return;
+
+    if (
+      !(await confirm({
+        title: `Reset ${activeCompany.label}`,
+        message: `This will set all opening/closing stock to zero and delete every in/out transaction for ${activeCompany.label}. Product names stay in the catalog. This cannot be undone.`,
+        confirmLabel: "Reset to zero",
+        variant: "danger",
+      }))
+    ) {
+      return;
+    }
+
+    setResetting(true);
+    setError("");
+    try {
+      const result = await api.resetCompanyStock(company);
+      catalogCacheRef.current.clear();
+      toast({ message: result.message, type: "success" });
+      await loadList(company, 1, appliedSearch);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -291,6 +341,7 @@ export function CfoProducts() {
   const trifoneColumns = trifoneFields.length
     ? trifoneFields
     : [
+        { key: "costPrice", label: "Cost Price", type: "money" },
         { key: "openingStock", label: "Opening Stock", type: "count" },
         { key: "closingStock", label: "Closing Stock", type: "count" },
       ];
@@ -311,13 +362,24 @@ export function CfoProducts() {
     <div className="page">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Chief Financial Officer</p>
+          <p className="eyebrow">{roleLabel(user?.role)}</p>
           <h1>Product catalog</h1>
         </div>
         <p className="lede tight">
-          Upload product names by company. Only names are read from Excel — opening
-          and closing stock start at zero. Clerks update balances from their
-          dashboards; detailed tracking stays in the ledger.
+          {canManageCatalog ? (
+            <>
+              Upload product names by company. Accessible reads{" "}
+              <strong>Sale Price</strong>; Trifone Gadgets reads{" "}
+              <strong>Cost Price</strong>. Opening and closing stock start at zero —
+              clerks update balances from their dashboards; detailed tracking stays in
+              the ledger.
+            </>
+          ) : (
+            <>
+              Live catalog and stock by company across APL, Trifone Gadgets, Trifone
+              Electronics, and Press. Catalog uploads and edits are managed by the CFO.
+            </>
+          )}
         </p>
       </header>
 
@@ -336,17 +398,28 @@ export function CfoProducts() {
         ))}
       </div>
 
+      {canManageCatalog ? (
       <section className="entry-card upload-card">
         <div className="section-head">
           <h2>Upload products</h2>
-          <button
-            type="button"
-            className="ghost"
-            disabled={downloading || !activeCompany.ready}
-            onClick={downloadTemplate}
-          >
-            {downloading ? "Preparing…" : "Download template"}
-          </button>
+          <div className="actions" style={{ margin: 0 }}>
+            <button
+              type="button"
+              className="ghost"
+              disabled={downloading || !activeCompany.ready}
+              onClick={downloadTemplate}
+            >
+              {downloading ? "Preparing…" : "Download template"}
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              disabled={resetting || busy || !activeCompany.ready || total === 0}
+              onClick={resetCompanyStock}
+            >
+              {resetting ? "Resetting…" : "Reset in/out to 0"}
+            </button>
+          </div>
         </div>
 
         <form className="upload-form" onSubmit={onUpload}>
@@ -362,8 +435,9 @@ export function CfoProducts() {
           <p className="hint">
             {isTrifone ? (
               <>
-                Only the <strong>ITEM NAME</strong> column is read.{" "}
-                <strong>Opening stock</strong>, <strong>closing stock</strong>, and all
+                The <strong>ITEM NAME</strong> column and the{" "}
+                <strong>Cost Price</strong> column are read.{" "}
+                <strong>Opening stock</strong>, <strong>closing stock</strong>, and
                 other columns are ignored.
               </>
             ) : isElectronics ? (
@@ -374,16 +448,18 @@ export function CfoProducts() {
               </>
             ) : isPress ? (
               <>
-                Only the <strong>MATERIALS ITEM</strong> column is read.{" "}
-                <strong>Opening stock</strong>, <strong>closing stock</strong>, and all
-                other columns are ignored — the Press team updates in/out from their
-                dashboard.
+                The <strong>MATERIALS ITEM</strong> column is required. Quantities are
+                read from <strong>QTY USED</strong>, or from{" "}
+                <strong>Opening Stock</strong> / <strong>Closing Stock</strong> when
+                present. Existing materials are updated with the new figures; new items
+                are added.
               </>
             ) : (
               <>
-                Only the <strong>BookName</strong> (or Item Name / Product Name) column
-                is read. <strong>Opening stock</strong>, <strong>closing stock</strong>,
-                location counts, and other columns are ignored.
+                The <strong>BookName</strong> (or Item Name / Product Name) column
+                and the <strong>Sale Price</strong> column are read.{" "}
+                <strong>Opening stock</strong>, <strong>closing stock</strong>,
+                location counts, AllTotal, and other columns are ignored.
               </>
             )}
           </p>
@@ -399,8 +475,15 @@ export function CfoProducts() {
                 onChange={() => setUploadMode("update")}
               />
               <span>
-                <strong>Update catalog</strong> — add new products and reset matching
-                ones to zero; keep existing products not in the file
+                <strong>Update catalog</strong> — add new products
+                {company === "accessible"
+                  ? ", set Sale Price from the file, and reset matching stock to zero"
+                  : company === "trifone"
+                    ? ", set Cost Price from the file, and reset matching stock to zero"
+                    : company === "press"
+                      ? " and update QTY USED / stock figures from the file"
+                  : " and reset matching ones to zero"}
+                ; keep existing products not in the file
               </span>
             </label>
             <label className="radio-option">
@@ -429,6 +512,7 @@ export function CfoProducts() {
           </div>
         </form>
       </section>
+      ) : null}
 
       <section className="table-wrap" key={company}>
         <div className="section-head">
@@ -493,8 +577,9 @@ export function CfoProducts() {
               <table className="inventory-table catalog-table">
                 <thead>
                   <tr>
-                    <th>#</th>
+                    <th>NO</th>
                     <th>{isPress ? "Materials Item" : isItemCatalog ? "Item Name" : "BookName"}</th>
+                    {!isItemCatalog ? <th>Sale Price</th> : null}
                     {isTrifone
                       ? trifoneColumns.map((field) => (
                           <th key={field.key}>{field.label}</th>
@@ -511,32 +596,49 @@ export function CfoProducts() {
                           <th key={loc}>
                             <span className="col-head">
                               <span>{loc}</span>
-                              <button
-                                type="button"
-                                className="icon-btn danger"
-                                title={`Delete ${loc} column`}
-                                aria-label={`Delete ${loc} column`}
-                                disabled={deletingColumn === loc}
-                                onClick={() => deleteColumn(loc, loc)}
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                              {canManageCatalog ? (
+                                <button
+                                  type="button"
+                                  className="icon-btn danger"
+                                  title={`Delete ${loc} column`}
+                                  aria-label={`Delete ${loc} column`}
+                                  disabled={deletingColumn === loc}
+                                  onClick={() => deleteColumn(loc, loc)}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              ) : null}
                             </span>
                           </th>
                         ))}
                     {!isItemCatalog ? <th>AllTotal</th> : null}
-                    <th aria-label="Actions" />
+                    {canManageCatalog ? <th aria-label="Actions" /> : null}
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((product, index) => (
-                    <tr key={product._id || product.name}>
+                  {products.map((product, index) => {
+                    const pressClosing =
+                      product.pressData?.closingStock ?? product.closingStock ?? 0;
+                    const pressLow = isPress && isLowStock(pressClosing);
+
+                    return (
+                    <tr
+                      key={product._id || product.name}
+                      className={pressLow ? "low-stock-row" : undefined}
+                    >
                       <td>{start + index}</td>
                       <td>{product.name}</td>
+                      {!isItemCatalog ? (
+                        <td className="num-strong">
+                          ₦{formatSalePrice(product.salePrice)}
+                        </td>
+                      ) : null}
                       {isTrifone
                         ? trifoneColumns.map((field) => (
                             <td key={field.key} className="num-strong">
-                              {formatCellValue(product.trifoneData?.[field.key])}
+                              {field.type === "money"
+                                ? `₦${formatSalePrice(product.trifoneData?.[field.key])}`
+                                : formatCellValue(product.trifoneData?.[field.key])}
                             </td>
                           ))
                         : isElectronics
@@ -549,13 +651,22 @@ export function CfoProducts() {
                               </td>
                             ))
                           : isPress
-                            ? pressColumns.map((field) => (
-                                <td key={field.key} className="num-strong">
-                                  {formatCellValue(
-                                    product.pressData?.[field.key] ?? product[field.key]
-                                  )}
-                                </td>
-                              ))
+                            ? pressColumns.map((field) => {
+                                const value =
+                                  product.pressData?.[field.key] ?? product[field.key];
+                                const low =
+                                  field.key === "closingStock" && isLowStock(value);
+                                return (
+                                  <td key={field.key} className="num-strong">
+                                    <span
+                                      className={low ? "low-stock-glow" : undefined}
+                                      title={low ? "Low stock — below 10" : undefined}
+                                    >
+                                      {formatCellValue(value)}
+                                    </span>
+                                  </td>
+                                );
+                              })
                         : locations.map((loc) => (
                             <td key={loc}>
                               {Number(product.stock?.[loc] || 0).toLocaleString()}
@@ -566,20 +677,23 @@ export function CfoProducts() {
                           {Number(product.allTotal || 0).toLocaleString()}
                         </td>
                       ) : null}
-                      <td className="row-actions">
-                        <button
-                          type="button"
-                          className="icon-btn danger"
-                          title={`Delete ${product.name}`}
-                          aria-label={`Delete ${product.name}`}
-                          disabled={deletingId === product._id}
-                          onClick={() => deleteRow(product)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
+                      {canManageCatalog ? (
+                        <td className="row-actions">
+                          <button
+                            type="button"
+                            className="icon-btn danger"
+                            title={`Delete ${product.name}`}
+                            aria-label={`Delete ${product.name}`}
+                            disabled={deletingId === product._id}
+                            onClick={() => deleteRow(product)}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      ) : null}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -1,6 +1,6 @@
 export function homeForRole(role) {
   if (role === "admin") return "/admin";
-  if (role === "cfo") return "/overview";
+  if (role === "cfo" || role === "md") return "/overview";
   if (role === "accountant") return "/accountant/movement";
   if (role === "trifone") return "/trifone/movement";
   if (role === "press") return "/press/movement";
@@ -10,6 +10,7 @@ export function homeForRole(role) {
 export function roleLabel(role) {
   if (role === "admin") return "Administrator";
   if (role === "cfo") return "Chief Financial Officer";
+  if (role === "md") return "Managing Director";
   if (role === "accountant") return "Accountant";
   if (role === "trifone") return "Trifone";
   if (role === "press") return "Press";

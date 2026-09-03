@@ -2,11 +2,16 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 
 const PAGE_SIZE = 50;
+const LOW_STOCK_THRESHOLD = 10;
 
 function fmt(value) {
   return Number(value || 0).toLocaleString("en-US", {
     maximumFractionDigits: 0,
   });
+}
+
+function isLowStock(value) {
+  return Number(value || 0) < LOW_STOCK_THRESHOLD;
 }
 
 export function PressInventory() {
@@ -111,14 +116,27 @@ export function PressInventory() {
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((product, index) => (
-                    <tr key={product._id || product.name}>
-                      <td>{start + index}</td>
-                      <td>{product.name}</td>
-                      <td>{fmt(product.openingBalance)}</td>
-                      <td className="num-strong">{fmt(product.balance)}</td>
-                    </tr>
-                  ))}
+                  {products.map((product, index) => {
+                    const low = isLowStock(product.balance);
+                    return (
+                      <tr
+                        key={product._id || product.name}
+                        className={low ? "low-stock-row" : undefined}
+                      >
+                        <td>{start + index}</td>
+                        <td>{product.name}</td>
+                        <td>{fmt(product.openingBalance)}</td>
+                        <td className="num-strong">
+                          <span
+                            className={low ? "low-stock-glow" : undefined}
+                            title={low ? "Low stock — below 10" : undefined}
+                          >
+                            {fmt(product.balance)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

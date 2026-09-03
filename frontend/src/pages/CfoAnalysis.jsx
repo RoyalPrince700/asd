@@ -15,7 +15,9 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api";
+import { useAuth } from "../context/AuthContext.jsx";
 import { COMPANY_OPTIONS, companyLabel } from "../constants/companies";
+import { roleLabel } from "../utils/role.js";
 
 const CHART_COLORS = ["#132337", "#1f6b4a", "#b08a2d", "#9a3412", "#1c334d", "#57534e"];
 
@@ -94,6 +96,7 @@ function renderMarkdown(text) {
 }
 
 export function CfoAnalysis() {
+  const { user } = useAuth();
   const [view, setView] = useState("charts");
   const [showMarkdown, setShowMarkdown] = useState(false);
   const [filters, setFilters] = useState({ company: "", from: "", to: "" });
@@ -157,7 +160,7 @@ export function CfoAnalysis() {
     return (
       <div className="page">
         <header className="page-head">
-          <p className="eyebrow">Chief Financial Officer</p>
+          <p className="eyebrow">{roleLabel(user?.role)}</p>
           <h1>Analysis</h1>
         </header>
         <p className="hint">Loading financial analysis…</p>
@@ -174,7 +177,7 @@ export function CfoAnalysis() {
     <div className="page">
       <header className="page-head split">
         <div>
-          <p className="eyebrow">Chief Financial Officer</p>
+          <p className="eyebrow">{roleLabel(user?.role)}</p>
           <h1>Analysis</h1>
           <p className="lede tight">
             Inventory, revenue, and margin insights across APL, Trifone Gadgets, Trifone Electronics, and Press raw materials — drawn from live catalogues and ledger movement.

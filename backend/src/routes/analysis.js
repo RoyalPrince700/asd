@@ -5,7 +5,7 @@ const { buildAnalysis } = require("../utils/analysis");
 
 const router = express.Router();
 
-router.use(protect, requireRole("cfo"));
+router.use(protect, requireRole("cfo", "md"));
 
 router.get(
   "/",

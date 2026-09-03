@@ -13,7 +13,9 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api";
+import { useAuth } from "../context/AuthContext.jsx";
 import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel, isLocationlessCompany } from "../constants/companies";
+import { roleLabel } from "../utils/role.js";
 
 function fmt(value) {
   return Number(value || 0).toLocaleString("en-US", {
@@ -47,6 +49,7 @@ function companiesHint(companies) {
 }
 
 export function CfoHome() {
+  const { user } = useAuth();
   const [filters, setFilters] = useState({
     stockId: "",
     productName: "",
@@ -166,7 +169,7 @@ export function CfoHome() {
     <div className="page">
       <header className="page-head split">
         <div>
-          <p className="eyebrow">Chief Financial Officer</p>
+          <p className="eyebrow">{roleLabel(user?.role)}</p>
           <h1>Stock position</h1>
           <p className="lede tight">{scopeLabel}</p>
         </div>

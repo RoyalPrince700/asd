@@ -180,6 +180,11 @@ export const api = {
     body.append("mode", mode);
     return request("/api/products/upload", { method: "POST", body });
   },
+  resetCompanyStock: (company) =>
+    request("/api/products/reset", {
+      method: "POST",
+      body: JSON.stringify({ company }),
+    }),
   downloadProductTemplate: async (company = "accessible") => {
     const blob = await request(`/api/products/template${query({ company })}`, {
       blob: true,

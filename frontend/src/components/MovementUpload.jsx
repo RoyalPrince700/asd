@@ -50,7 +50,7 @@ export function MovementUpload({
     const ok = await confirm({
       title: pressUpload ? "Upload raw materials" : "Upload stock movements",
       message: pressUpload
-        ? `Import raw material quantities from the Excel file for ${scopeLabel} on ${date}? MATERIALS ITEM must match catalog products. QTY USED will be recorded as In for each row.`
+        ? `Import raw material quantities from the Excel file for ${scopeLabel} on ${date}? QTY USED will be recorded as In and balances will update. New MATERIALS ITEM names are added to the catalog automatically.`
         : `Import stock movements from the Excel file for ${scopeLabel} on ${date}? Products must already exist in the catalog. Opening balances that differ from the platform will be reconciled.`,
       confirmLabel: "Upload",
     });
@@ -138,10 +138,11 @@ export function MovementUpload({
         <p className="hint">
           {pressUpload ? (
             <>
-              We read only <strong>MATERIALS ITEM</strong> and <strong>QTY USED</strong> from
-              your Excel file. Each QTY USED value is posted as <strong>In</strong> for that
-              material. Names must match the Press catalog. Rows with zero QTY USED are skipped.
-              All rows use the date selected above ({date}).
+              We read <strong>MATERIALS ITEM</strong> and <strong>QTY USED</strong> from
+              your Excel file. Each QTY USED value is posted as <strong>In</strong> and
+              updates the live balance for that material. Names that are not yet in the
+              catalog are created automatically. Rows with zero QTY USED are skipped. All
+              rows use the date selected above ({date}).
             </>
           ) : (
             <>

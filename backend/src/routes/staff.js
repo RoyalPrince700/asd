@@ -6,6 +6,9 @@ const { COMPANIES, ACCESSIBLE_LOCATIONS, isLocationlessCompany } = require("../c
 
 const router = express.Router();
 
+const MANAGEABLE_ROLES = ["clerk", "accountant", "trifone", "press", "md"];
+const ASSIGNABLE_ROLES = ["clerk", "accountant", "trifone", "press", "md"];
+
 console.log("[staff] route loaded", {
   isLocationlessCompany: typeof isLocationlessCompany,
   companies: Object.values(COMPANIES),
@@ -68,7 +71,7 @@ router.use(protect, requireRole("cfo"));
 router.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const staff = await User.find({ role: { $in: ["clerk", "accountant", "trifone", "press"] } })
+    const staff = await User.find({ role: { $in: MANAGEABLE_ROLES } })
       .sort({ createdAt: -1 })
       .select("-password");
     res.json({ staff: staff.map(publicStaff) });
@@ -94,28 +97,34 @@ router.patch(
       return res.status(404).json({ message: "Staff member not found" });
     }
 
-    if (!["clerk", "accountant", "trifone", "press"].includes(user.role)) {
+    if (!MANAGEABLE_ROLES.includes(user.role)) {
       console.warn("[staff PATCH] invalid role to manage", user.role);
       return res.status(400).json({
-        message: "Only clerk, accountant, trifone, or press accounts can be managed here.",
+        message: "Only clerk, accountant, trifone, press, or MD accounts can be managed here.",
       });
     }
 
     const { assignment, location, assignedCompany, role } = req.body;
 
     if (role !== undefined) {
-      const allowed = ["clerk", "accountant", "trifone", "press"];
-      if (!allowed.includes(role)) {
-        return res.status(400).json({ message: "Role must be clerk, accountant, trifone, or press." });
+      if (!ASSIGNABLE_ROLES.includes(role)) {
+        return res.status(400).json({
+          message: "Role must be clerk, accountant, trifone, press, or md.",
+        });
       }
       user.role = role;
-      if (role === "accountant" || role === "trifone" || role === "press") {
+      if (role === "accountant" || role === "trifone" || role === "press" || role === "md") {
         user.assignedCompany = null;
         user.location = undefined;
       }
     }
 
-    if (user.role === "accountant" || user.role === "trifone" || user.role === "press") {
+    if (
+      user.role === "accountant" ||
+      user.role === "trifone" ||
+      user.role === "press" ||
+      user.role === "md"
+    ) {
       await user.save();
       console.log(`[staff PATCH] saved ${user.role}`, publicStaff(user));
       return res.json({ staff: publicStaff(user) });

@@ -36,6 +36,13 @@ const NAV_BY_ROLE = {
     { to: "/products", label: "Product catalog", icon: Package },
     { to: "/staff", label: "Staff", icon: Users },
   ],
+  md: [
+    { to: "/overview", label: "Overview", icon: LayoutDashboard },
+    { to: "/analysis", label: "Analysis", icon: BarChart3 },
+    { to: "/ledger", label: "Ledger lines", icon: ScrollText },
+    { to: "/products", label: "Product catalog", icon: Package },
+    { to: "/my-requests", label: "My requests", icon: ClipboardList },
+  ],
   accountant: [
     { to: "/accountant/movement", label: "Stock movement", icon: ClipboardList },
     { to: "/accountant/inventory", label: "Inventory", icon: Package },

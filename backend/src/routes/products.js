@@ -3,6 +3,8 @@ const multer = require("multer");
 const ExcelJS = require("exceljs");
 const Product = require("../models/Product");
 const CatalogConfig = require("../models/CatalogConfig");
+const StockRecord = require("../models/StockRecord");
+const RecordChange = require("../models/RecordChange");
 const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const {
@@ -13,8 +15,6 @@ const {
   ELECTRONICS_CATALOG_FIELDS,
   PRESS_CATALOG_FIELDS,
   emptyAccessibleStock,
-  emptyTrifoneData,
-  emptyElectronicsData,
   normalizeTrifoneData,
   normalizeElectronicsData,
   normalizePressData,
@@ -24,6 +24,9 @@ const {
 } = require("../constants/companies");
 const {
   parseCatalogNamesExcel,
+  parseAccessibleCatalogExcel,
+  parseTrifoneCatalogExcel,
+  parsePressCatalogExcel,
   namesToCatalogRows,
   getCurrentStock,
   buildStockSnapshot,
@@ -91,6 +94,7 @@ function formatAccessibleProduct(row, visibleLocations = ACCESSIBLE_LOCATIONS) {
     _id: row._id,
     name: row.name,
     company: row.company,
+    salePrice: Number(row.salePrice) || 0,
     stock,
     allTotal,
   };
@@ -255,7 +259,7 @@ router.get("/my-inventory", requireRole("clerk", "accountant", "trifone", "press
     .sort({ name: 1 })
     .skip((page - 1) * limit)
     .limit(limit)
-    .select("name company stock trifoneData electronicsData pressData");
+    .select("name company stock salePrice trifoneData electronicsData pressData");
 
   const movementMap = await buildMovementMap(company, location);
 
@@ -315,7 +319,7 @@ router.get("/", asyncHandler(async (req, res) => {
       .sort({ name: 1 })
       .skip((safePage - 1) * safeLimit)
       .limit(safeLimit)
-      .select("name company stock trifoneData electronicsData pressData");
+      .select("name company stock salePrice trifoneData electronicsData pressData");
 
     let movementMap = null;
     if (live && company) {
@@ -358,7 +362,7 @@ router.get("/", asyncHandler(async (req, res) => {
   });
 }));
 
-router.get("/stock", requireRole("cfo"), asyncHandler(async (_req, res) => {
+router.get("/stock", requireRole("cfo", "md"), asyncHandler(async (_req, res) => {
   res.json(await buildStockSnapshot());
 }));
 
@@ -387,7 +391,7 @@ router.get("/stock-level", asyncHandler(async (req, res) => {
   res.json({ openingBalance });
 }));
 
-router.get("/template", requireRole("cfo"), asyncHandler(async (req, res) => {
+router.get("/template", requireRole("cfo", "md"), asyncHandler(async (req, res) => {
   const company = resolveCompany(req.query.company);
   if (!company) {
     return res.status(400).json({ message: "Invalid company." });
@@ -406,14 +410,46 @@ router.get("/template", requireRole("cfo"), asyncHandler(async (req, res) => {
           : "BookName";
 
   const sheet = workbook.addWorksheet("Catalog");
-  sheet.columns = [
-    { header: nameHeader, key: "name", width: 42 },
-    { header: "Opening Stock", key: "opening", width: 16 },
-    { header: "Closing Stock", key: "closing", width: 16 },
-  ];
-  sheet.addRow({ name: "Example product 1", opening: 100, closing: 85 });
-  sheet.addRow({ name: "Example product 2", opening: 50, closing: 40 });
-  sheet.addRow({ name: "Example product 3", opening: 0, closing: 0 });
+  if (company === COMPANIES.ACCESSIBLE) {
+    sheet.columns = [
+      { header: nameHeader, key: "name", width: 42 },
+      { header: "Sale Price", key: "salePrice", width: 14 },
+      { header: "Opening Stock", key: "opening", width: 16 },
+      { header: "Closing Stock", key: "closing", width: 16 },
+    ];
+    sheet.addRow({ name: "Example product 1", salePrice: 2500, opening: 100, closing: 85 });
+    sheet.addRow({ name: "Example product 2", salePrice: 1800, opening: 50, closing: 40 });
+    sheet.addRow({ name: "Example product 3", salePrice: 0, opening: 0, closing: 0 });
+  } else if (company === COMPANIES.TRIFONE) {
+    sheet.columns = [
+      { header: nameHeader, key: "name", width: 42 },
+      { header: "Cost Price", key: "costPrice", width: 14 },
+      { header: "Opening Stock", key: "opening", width: 16 },
+      { header: "Closing Stock", key: "closing", width: 16 },
+    ];
+    sheet.addRow({ name: "Example product 1", costPrice: 45000, opening: 100, closing: 85 });
+    sheet.addRow({ name: "Example product 2", costPrice: 28000, opening: 50, closing: 40 });
+    sheet.addRow({ name: "Example product 3", costPrice: 0, opening: 0, closing: 0 });
+  } else if (company === COMPANIES.PRESS) {
+    sheet.columns = [
+      { header: nameHeader, key: "name", width: 42 },
+      { header: "QTY USED", key: "qtyUsed", width: 14 },
+      { header: "Opening Stock", key: "opening", width: 16 },
+      { header: "Closing Stock", key: "closing", width: 16 },
+    ];
+    sheet.addRow({ name: "Example material 1", qtyUsed: 500, opening: 500, closing: 500 });
+    sheet.addRow({ name: "Example material 2", qtyUsed: 25, opening: 25, closing: 25 });
+    sheet.addRow({ name: "Example material 3", qtyUsed: 0, opening: 0, closing: 0 });
+  } else {
+    sheet.columns = [
+      { header: nameHeader, key: "name", width: 42 },
+      { header: "Opening Stock", key: "opening", width: 16 },
+      { header: "Closing Stock", key: "closing", width: 16 },
+    ];
+    sheet.addRow({ name: "Example product 1", opening: 100, closing: 85 });
+    sheet.addRow({ name: "Example product 2", opening: 50, closing: 40 });
+    sheet.addRow({ name: "Example product 3", opening: 0, closing: 0 });
+  }
 
   res.setHeader(
     "Content-Type",
@@ -436,7 +472,10 @@ function catalogSetFields(company, row) {
   if (company === COMPANIES.TRIFONE) return { trifoneData: row.trifoneData };
   if (company === COMPANIES.ELECTRONICS) return { electronicsData: row.electronicsData };
   if (company === COMPANIES.PRESS) return { pressData: row.pressData };
-  return { stock: row.stock };
+  return {
+    stock: row.stock,
+    salePrice: Number(row.salePrice) || 0,
+  };
 }
 
 async function importCatalogRows(company, rows, userId, mode) {
@@ -519,6 +558,64 @@ async function importCatalogRows(company, rows, userId, mode) {
 }
 
 router.post(
+  "/reset",
+  requireRole("cfo"),
+  asyncHandler(async (req, res) => {
+    const company = resolveCompany(req.body.company || req.query.company);
+    if (!company) {
+      return res.status(400).json({ message: "Invalid company." });
+    }
+
+    const label = COMPANY_LABELS[company];
+
+    const recordIds = await StockRecord.find({ company }).distinct("_id");
+    const deletedRecords = await StockRecord.deleteMany({ company });
+    if (recordIds.length) {
+      await RecordChange.deleteMany({ recordId: { $in: recordIds } });
+    }
+
+    let productUpdate;
+    if (company === COMPANIES.ACCESSIBLE) {
+      productUpdate = { $set: { stock: emptyAccessibleStock() } };
+    } else if (company === COMPANIES.TRIFONE) {
+      productUpdate = {
+        $set: {
+          "trifoneData.openingStock": 0,
+          "trifoneData.closingStock": 0,
+          "trifoneData.currentStock": 0,
+        },
+      };
+    } else if (company === COMPANIES.ELECTRONICS) {
+      productUpdate = {
+        $set: {
+          "electronicsData.openingStock": 0,
+          "electronicsData.closingStock": 0,
+          "electronicsData.currentStock": 0,
+        },
+      };
+    } else if (company === COMPANIES.PRESS) {
+      productUpdate = {
+        $set: {
+          "pressData.openingStock": 0,
+          "pressData.closingStock": 0,
+        },
+      };
+    } else {
+      return res.status(400).json({ message: "Invalid company." });
+    }
+
+    const productsResult = await Product.updateMany({ company }, productUpdate);
+
+    res.json({
+      message: `Reset ${label}: all in/out movements cleared and stock balances set to zero. Product names were kept.`,
+      company,
+      recordsDeleted: deletedRecords.deletedCount || 0,
+      productsReset: productsResult.modifiedCount || 0,
+    });
+  })
+);
+
+router.post(
   "/upload",
   requireRole("cfo"),
   upload.single("file"),
@@ -536,19 +633,28 @@ router.post(
 
     const mode = resolveUploadMode(req.body.mode || req.query.mode);
 
-    const names = await parseCatalogNamesExcel(req.file.buffer, company);
-    const rows = namesToCatalogRows(names, company);
+    let rows;
+    if (company === COMPANIES.ACCESSIBLE) {
+      rows = await parseAccessibleCatalogExcel(req.file.buffer);
+    } else if (company === COMPANIES.TRIFONE) {
+      rows = await parseTrifoneCatalogExcel(req.file.buffer);
+    } else if (company === COMPANIES.PRESS) {
+      rows = await parsePressCatalogExcel(req.file.buffer);
+    } else {
+      const names = await parseCatalogNamesExcel(req.file.buffer, company);
+      rows = namesToCatalogRows(names, company);
+    }
 
     if (!rows.length) {
       return res.status(400).json({
         message:
           company === COMPANIES.TRIFONE
-            ? "No product names found. Use a column headed ITEM NAME or Item Name."
+            ? "No product names found. Use a column headed ITEM NAME or Item Name. Optionally include a Cost Price column."
             : company === COMPANIES.ELECTRONICS
               ? "No product names found. Use a column headed Item Name, or product names across the top row."
             : company === COMPANIES.PRESS
-              ? "No product names found. Use a column headed MATERIALS ITEM."
-            : "No product names found. Use a column headed BookName or Item Name.",
+              ? "No product names found. Use a column headed MATERIALS ITEM. Optionally include QTY USED, Opening Stock, or Closing Stock."
+            : "No product names found. Use a column headed BookName or Item Name. Optionally include a Sale Price column.",
       });
     }
 

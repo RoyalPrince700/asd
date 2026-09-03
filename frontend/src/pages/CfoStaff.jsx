@@ -8,10 +8,13 @@ const STAFF_ROLES = [
   { id: "trifone", label: "Trifone" },
   { id: "press", label: "Press" },
   { id: "accountant", label: "Accountant" },
+  { id: "md", label: "Managing Director" },
 ];
 
 function assignmentValue(item) {
-  if (item.role === "accountant" || item.role === "trifone" || item.role === "press") return "";
+  if (item.role === "accountant" || item.role === "trifone" || item.role === "press" || item.role === "md") {
+    return "";
+  }
   if (isLocationlessCompany(item.assignedCompany)) return item.assignedCompany;
   if (item.location) return item.location;
   return "";
@@ -21,6 +24,7 @@ function assignmentLabel(item) {
   if (item.role === "accountant") return "All locations";
   if (item.role === "trifone") return "Trifone Gadgets & Electronics";
   if (item.role === "press") return "Press raw materials";
+  if (item.role === "md") return "All companies · monitor only";
   const value = assignmentValue(item);
   if (isLocationlessCompany(value)) return companyLabel(value);
   if (value) return `APL · ${value}`;
@@ -93,6 +97,7 @@ export function CfoStaff() {
   const accountants = staff.filter((item) => item.role === "accountant");
   const trifoneStaff = staff.filter((item) => item.role === "trifone");
   const pressStaff = staff.filter((item) => item.role === "press");
+  const mdStaff = staff.filter((item) => item.role === "md");
   const assigned = clerks.filter((item) => assignmentValue(item));
   const pending = clerks.filter((item) => !assignmentValue(item));
   const trifoneCount = clerks.filter((item) => item.assignedCompany === "trifone").length;
@@ -108,9 +113,10 @@ export function CfoStaff() {
           <p className="lede tight">
             Assign staff to Trifone Gadgets, Trifone Electronics, or an APL location after they sign up.
             Set role to <strong>Trifone</strong> for staff who manage both Trifone registers,{" "}
-            <strong>Press</strong> for raw materials in/out, or{" "}
+            <strong>Press</strong> for raw materials in/out,{" "}
             <strong>Accountant</strong> for CFO department staff who can update inventory across all
-            companies and locations.
+            companies and locations, or <strong>Managing Director</strong> for read-only stock monitoring
+            across all companies.
           </p>
         </div>
       </header>
@@ -137,6 +143,10 @@ export function CfoStaff() {
         <article className="kpi">
           <span>Press role</span>
           <strong>{pressStaff.length}</strong>
+        </article>
+        <article className="kpi">
+          <span>Managing Directors</span>
+          <strong>{mdStaff.length}</strong>
         </article>
         <article className="kpi">
           <span>Trifone Gadgets</span>
@@ -204,6 +214,8 @@ export function CfoStaff() {
                       <span className="hint">Trifone Gadgets &amp; Electronics</span>
                     ) : item.role === "press" ? (
                       <span className="hint">Press raw materials</span>
+                    ) : item.role === "md" ? (
+                      <span className="hint">All companies · monitor only</span>
                     ) : (
                       <>
                         <select
@@ -234,7 +246,10 @@ export function CfoStaff() {
                       : "—"}
                   </td>
                   <td>
-                    {item.role === "accountant" || item.role === "trifone" || item.role === "press" ? (
+                    {item.role === "accountant" ||
+                    item.role === "trifone" ||
+                    item.role === "press" ||
+                    item.role === "md" ? (
                       <span className="ok">Active · {roleLabel(item.role)}</span>
                     ) : assignmentValue(item) ? (
                       <span className="ok">Active · {assignmentLabel(item)}</span>
@@ -268,6 +283,10 @@ export function CfoStaff() {
           <li>
             Set role to <strong>Accountant</strong> for CFO department staff who need to update inventory
             on behalf of all clerks across any company and location.
+          </li>
+          <li>
+            Set role to <strong>Managing Director</strong> for read-only access to stock overview,
+            analysis, ledger lines, and product catalogs across all companies (no uploads or approvals).
           </li>
           <li>
             Accountant updates appear on the Ledger lines page with their name marked

@@ -323,11 +323,42 @@ async function importMovementRows(rows, options) {
     imported: 0,
     skipped: 0,
     reconciled: 0,
+    created: 0,
     errors: [],
   };
 
   const pendingRecords = [];
   const catalogUpdates = new Map();
+  const pendingInboundByProduct = new Map();
+
+  if (options.pressFormat) {
+    const toCreate = [];
+    const seenCreate = new Set();
+    for (const row of rows) {
+      const key = row.titleName.trim().toLowerCase();
+      if (!key || lookup.has(key) || seenCreate.has(key)) continue;
+      if ((Number(row.recQty) || 0) <= 0) continue;
+      seenCreate.add(key);
+      toCreate.push(row.titleName.trim());
+    }
+
+    if (toCreate.length) {
+      const created = await Product.insertMany(
+        toCreate.map((name) => ({
+          name,
+          company: COMPANIES.PRESS,
+          pressData: { openingStock: 0, closingStock: 0 },
+          uploadedBy: enteredBy,
+        })),
+        { ordered: false }
+      );
+      results.created = created.length;
+      for (const product of created) {
+        lookup.set(product.name.trim().toLowerCase(), product.name);
+        byName.set(product.name, product);
+      }
+    }
+  }
 
   for (const row of rows) {
     const productName = lookup.get(row.titleName.trim().toLowerCase());
@@ -344,9 +375,10 @@ async function importMovementRows(rows, options) {
     const product = byName.get(productName);
     const catalogDelta = catalogUpdates.get(productName) || 0;
     const movementNet = movementMap.get(productName) || 0;
+    const pendingInbound = pendingInboundByProduct.get(productName) || 0;
     const currentStock = Math.max(
       0,
-      catalogBaseStock(product, location) + catalogDelta + movementNet
+      catalogBaseStock(product, location) + catalogDelta + movementNet + pendingInbound
     );
 
     if (options.pressFormat) {
@@ -357,6 +389,7 @@ async function importMovementRows(rows, options) {
 
       const openingBalance = currentStock;
       const closingBalance = openingBalance + row.recQty;
+      pendingInboundByProduct.set(productName, pendingInbound + row.recQty);
 
       pendingRecords.push({
         productName,
@@ -482,6 +515,26 @@ async function importMovementRows(rows, options) {
     }));
     await StockRecord.insertMany(docs, { ordered: false });
     results.imported = docs.length;
+  }
+
+  if (options.pressFormat && pendingInboundByProduct.size) {
+    const closingOps = [];
+    for (const [productName, inboundTotal] of pendingInboundByProduct) {
+      const product = byName.get(productName);
+      if (!product) continue;
+      const base = catalogBaseStock(product, null);
+      const priorNet = movementMap.get(productName) || 0;
+      const closingStock = Math.max(0, base + priorNet + inboundTotal);
+      closingOps.push({
+        updateOne: {
+          filter: { _id: product._id },
+          update: { $set: { "pressData.closingStock": closingStock } },
+        },
+      });
+    }
+    if (closingOps.length) {
+      await Product.bulkWrite(closingOps);
+    }
   }
 
   return results;

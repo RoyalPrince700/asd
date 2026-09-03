@@ -22,7 +22,7 @@ const { applyStockIdFilter } = require("../utils/stockId");
 
 const router = express.Router();
 
-router.use(protect, requireRole("cfo"));
+router.use(protect, requireRole("cfo", "md"));
 
 function enteredByLabel(user) {
   if (!user?.name) return "";

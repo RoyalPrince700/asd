@@ -12,6 +12,7 @@ const trifoneDataSchema = new mongoose.Schema(
   {
     openingStock: { type: Number, default: 0, min: 0 },
     closingStock: { type: Number, default: 0, min: 0 },
+    costPrice: { type: Number, default: 0, min: 0 },
   },
   { _id: false, strict: false }
 );
@@ -44,6 +45,11 @@ const productSchema = new mongoose.Schema(
     stock: {
       type: stockSchema,
       default: undefined,
+    },
+    salePrice: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     trifoneData: {
       type: trifoneDataSchema,

@@ -258,7 +258,7 @@ router.get("/products", asyncHandler(async (req, res) => {
   });
 }));
 
-router.get("/summary", requireRole("cfo"), asyncHandler(async (req, res) => {
+router.get("/summary", requireRole("cfo", "md"), asyncHandler(async (req, res) => {
   const filter = buildFilter(req.query);
   const records = await StockRecord.find(filter).sort({ date: 1 });
 
@@ -362,6 +362,11 @@ router.post(
     });
 
     const parts = [`${results.imported} transaction${results.imported === 1 ? "" : "s"} imported.`];
+    if (results.created) {
+      parts.push(
+        `${results.created} new material${results.created === 1 ? "" : "s"} added to catalog.`
+      );
+    }
     if (results.reconciled) {
       parts.push(
         `${results.reconciled} opening balance${results.reconciled === 1 ? "" : "s"} reconciled.`

@@ -81,6 +81,7 @@ const ACCESSIBLE_LOCATIONS = ["HO", "AK", "AB", "ED", "LA", "KA", "US", "AN", "A
 const SKIP_HEADERS = /^sale\s*price$|^all\s*total$|^total$/i;
 
 const TRIFONE_CATALOG_FIELDS = [
+  { key: "costPrice", label: "Cost Price", type: "money" },
   { key: "openingStock", label: "Opening Stock", type: "count" },
   { key: "closingStock", label: "Closing Stock", type: "count" },
 ];
@@ -208,7 +209,8 @@ function normalizeTrifoneData(data) {
     ) || 0;
   const closingStock =
     Number(raw.closingStock ?? raw.currentStock ?? openingStock) || 0;
-  return { openingStock, closingStock };
+  const costPrice = Number(raw.costPrice) || 0;
+  return { openingStock, closingStock, costPrice };
 }
 
 function normalizeElectronicsData(data) {
@@ -220,7 +222,7 @@ function normalizeElectronicsData(data) {
 }
 
 function emptyTrifoneData() {
-  return { openingStock: 0, closingStock: 0 };
+  return { openingStock: 0, closingStock: 0, costPrice: 0 };
 }
 
 function emptyElectronicsData() {

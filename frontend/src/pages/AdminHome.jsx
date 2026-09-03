@@ -4,7 +4,7 @@ import { useDialog } from "../context/DialogContext.jsx";
 import { api } from "../api";
 import { roleLabel } from "../utils/role.js";
 
-const ROLES = ["clerk", "accountant", "cfo", "admin"];
+const ROLES = ["clerk", "accountant", "cfo", "md", "admin"];
 
 export function AdminHome() {
   const { user } = useAuth();
@@ -69,7 +69,7 @@ export function AdminHome() {
           <p className="eyebrow">Administration</p>
           <h1>User management</h1>
           <p className="lede tight">
-            Assign clerk, CFO, or admin roles. You are signed in as {user.name}.
+            Assign clerk, CFO, Managing Director, or admin roles. You are signed in as {user.name}.
           </p>
         </div>
       </header>

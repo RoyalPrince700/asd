@@ -1040,6 +1040,41 @@ th {
   min-width: 220px;
 }
 
+@keyframes low-stock-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(180, 35, 24, 0.35);
+    background-color: rgba(180, 35, 24, 0.14);
+  }
+  50% {
+    box-shadow: 0 0 16px 3px rgba(180, 35, 24, 0.7);
+    background-color: rgba(180, 35, 24, 0.32);
+  }
+}
+
+.low-stock-glow {
+  color: #b42318 !important;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 4px 8px;
+  display: inline-block;
+  min-width: 2.5rem;
+  text-align: right;
+  animation: low-stock-pulse 1.15s ease-in-out infinite;
+}
+
+tr.low-stock-row td {
+  background-color: rgba(180, 35, 24, 0.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .low-stock-glow {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(180, 35, 24, 0.55);
+    background-color: rgba(180, 35, 24, 0.2);
+  }
+}
+
 .cell-input {
   width: 72px;
   padding: 6px 8px;
@@ -1087,6 +1122,21 @@ button.icon-btn.danger:not(:disabled) {
 button.icon-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.catalog-table th:first-child,
+.catalog-table td:first-child {
+  min-width: 0;
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+  padding-inline: 10px 12px;
+}
+
+.catalog-table th:nth-child(2),
+.catalog-table td:nth-child(2) {
+  white-space: normal;
+  min-width: 220px;
 }
 
 .catalog-table th:last-child,
