@@ -212,8 +212,8 @@ export function CfoProducts() {
           ? `This will delete all ${total.toLocaleString()} existing products for ${activeCompany.label} and replace them with the uploaded file only. Continue?`
           : company === "accessible"
             ? `This will add new products from the file and update matching ones (including Sale Price; stock resets to zero). Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`
-            : company === "trifone"
-              ? `This will add new products from the file and update matching ones (including Cost Price; stock resets to zero). Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`
+            : company === "trifone" || company === "electronics"
+              ? `This will add new products from the file and update matching ones (including Cost Price; in and out reset to zero). Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`
               : `This will add new products from the file and reset matching products to zero stock. Products not in the file (currently ${total.toLocaleString()} in catalog) will be kept unchanged. Continue?`,
         confirmLabel: isReplace ? "Replace catalog" : "Update catalog",
         variant: isReplace ? "danger" : "default",
@@ -345,12 +345,16 @@ export function CfoProducts() {
         { key: "openingStock", label: "Opening Stock", type: "count" },
         { key: "closingStock", label: "Closing Stock", type: "count" },
       ];
-  const electronicsColumns = electronicsFields.length
-    ? electronicsFields
-    : [
-        { key: "openingStock", label: "Opening Stock", type: "count" },
-        { key: "closingStock", label: "Closing Stock", type: "count" },
-      ];
+  const electronicsColumns = (
+    electronicsFields.length
+      ? electronicsFields
+      : [
+          { key: "itemCode", label: "Item Code", type: "text" },
+          { key: "costPrice", label: "Cost Price", type: "money" },
+          { key: "openingStock", label: "Opening Stock", type: "count" },
+          { key: "closingStock", label: "Closing Stock", type: "count" },
+        ]
+  ).filter((field) => field.key !== "itemCode");
   const pressColumns = pressFields.length
     ? pressFields
     : [
@@ -369,8 +373,9 @@ export function CfoProducts() {
           {canManageCatalog ? (
             <>
               Upload product names by company. Accessible reads{" "}
-              <strong>Sale Price</strong>; Trifone Gadgets reads{" "}
-              <strong>Cost Price</strong>. Opening and closing stock start at zero —
+              <strong>Sale Price</strong>; Trifone Gadgets and Trifone Electronics
+              read <strong>Cost Price</strong>. Electronics also reads{" "}
+              <strong>Item Code</strong>. Opening and closing stock start at zero —
               clerks update balances from their dashboards; detailed tracking stays in
               the ledger.
             </>
@@ -442,9 +447,10 @@ export function CfoProducts() {
               </>
             ) : isElectronics ? (
               <>
-                Only product names are read — from an <strong>Item Name</strong> column
-                or names across the top row. Opening stock, closing stock, and other
-                columns are ignored.
+                The <strong>Item Code</strong>, <strong>Item name</strong>, and{" "}
+                <strong>Cost Price</strong> columns are read. In and out are set to{" "}
+                <strong>0</strong> and <strong>0</strong> on upload. Same item names
+                with different codes are kept as separate products.
               </>
             ) : isPress ? (
               <>
@@ -478,8 +484,8 @@ export function CfoProducts() {
                 <strong>Update catalog</strong> — add new products
                 {company === "accessible"
                   ? ", set Sale Price from the file, and reset matching stock to zero"
-                  : company === "trifone"
-                    ? ", set Cost Price from the file, and reset matching stock to zero"
+                  : company === "trifone" || company === "electronics"
+                    ? ", set Cost Price from the file, and reset matching in and out to 0"
                     : company === "press"
                       ? " and update QTY USED / stock figures from the file"
                   : " and reset matching ones to zero"}
@@ -578,6 +584,7 @@ export function CfoProducts() {
                 <thead>
                   <tr>
                     <th>NO</th>
+                    {isElectronics ? <th>Item Code</th> : null}
                     <th>{isPress ? "Materials Item" : isItemCatalog ? "Item Name" : "BookName"}</th>
                     {!isItemCatalog ? <th>Sale Price</th> : null}
                     {isTrifone
@@ -627,7 +634,14 @@ export function CfoProducts() {
                       className={pressLow ? "low-stock-row" : undefined}
                     >
                       <td>{start + index}</td>
-                      <td>{product.name}</td>
+                      {isElectronics ? (
+                        <td>{product.electronicsData?.itemCode || "—"}</td>
+                      ) : null}
+                      <td>
+                        {isElectronics
+                          ? product.electronicsData?.itemName || product.name
+                          : product.name}
+                      </td>
                       {!isItemCatalog ? (
                         <td className="num-strong">
                           ₦{formatSalePrice(product.salePrice)}
@@ -644,10 +658,16 @@ export function CfoProducts() {
                         : isElectronics
                           ? electronicsColumns.map((field) => (
                               <td key={field.key} className="num-strong">
-                                {formatCellValue(
-                                  product.electronicsData?.[field.key] ??
-                                    product[field.key]
-                                )}
+                                {field.type === "money"
+                                  ? `₦${formatSalePrice(
+                                      product.electronicsData?.[field.key]
+                                    )}`
+                                  : field.type === "text"
+                                    ? product.electronicsData?.[field.key] || "—"
+                                    : formatCellValue(
+                                        product.electronicsData?.[field.key] ??
+                                          product[field.key]
+                                      )}
                               </td>
                             ))
                           : isPress

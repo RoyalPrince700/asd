@@ -68,11 +68,11 @@ export function StaffOverview() {
   async function load(params = applied) {
     const [sum, rec, prod] = await Promise.all([
       api.mySummary(params),
-      api.records(params),
+      api.records({ ...params, page: 1, limit: 20 }),
       api.products({ company }),
     ]);
     setSummary(sum);
-    setRecords(rec.records.slice(0, 20));
+    setRecords(rec.records);
     setProducts(prod.products);
   }
 

@@ -1,4 +1,8 @@
 const TOKEN_KEY = "cfo_token";
+const GET_CACHE_TTL_MS = 15_000;
+const REQUEST_TIMEOUT_MS = 25_000;
+const getCache = new Map();
+const inFlightGets = new Map();
 
 const API_BASE = String(import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
@@ -8,11 +12,6 @@ if (!API_BASE) {
   );
 }
 
-console.log("[API] client configured", {
-  apiBase: API_BASE,
-  pageOrigin: typeof window !== "undefined" ? window.location.origin : "ssr",
-});
-
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -20,39 +19,8 @@ export function getToken() {
 export function setToken(token) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
-}
-
-function debugApi(label, details) {
-  console.log(`[API] ${label}`, details);
-}
-
-function parseBodyForLog(body) {
-  if (!body) return undefined;
-  if (body instanceof FormData) return "[FormData]";
-  if (typeof body !== "string") return body;
-  try {
-    return JSON.parse(body);
-  } catch {
-    return body;
-  }
-}
-
-async function probeApiHealth() {
-  const url = `${API_BASE}/api/health`;
-  try {
-    const res = await fetch(url);
-    const data = await res.json().catch(() => ({}));
-    debugApi("health probe", { url, status: res.status, ok: res.ok, data });
-    return { reachable: res.ok, status: res.status, data };
-  } catch (err) {
-    debugApi("health probe failed — backend is not reachable", {
-      url,
-      name: err.name,
-      message: err.message,
-      cause: err.cause,
-    });
-    return { reachable: false, error: err.message };
-  }
+  getCache.clear();
+  inFlightGets.clear();
 }
 
 async function request(path, options = {}) {
@@ -66,67 +34,98 @@ async function request(path, options = {}) {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const method = options.method || "GET";
+  const method = String(options.method || "GET").toUpperCase();
   const url = `${API_BASE}${path}`;
-  debugApi("request", {
-    method,
-    url,
-    path,
-    apiBase: API_BASE,
-    hasToken: Boolean(token),
-    body: parseBodyForLog(options.body),
-  });
+  const cacheKey = `${token || "anonymous"}:${url}`;
 
-  let res;
-  try {
-    res = await fetch(url, { ...options, headers });
-  } catch (err) {
-    const health = await probeApiHealth();
-    const details = {
-      method,
-      url,
-      apiBase: API_BASE,
-      name: err.name,
-      message: err.message,
-      cause: err.cause,
-      health,
-    };
-    console.error("[API] network failure (connection refused / failed to fetch)", details);
-    throw new Error(
-      health.reachable
-        ? `Network error calling ${url}: ${err.message}`
-        : `Cannot reach the API at ${API_BASE}. Start the backend with npm run dev in the backend folder, then retry. (${err.message})`
-    );
+  if (method === "GET" && !options.blob) {
+    const cached = getCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+    if (cached) getCache.delete(cacheKey);
+
+    const pending = inFlightGets.get(cacheKey);
+    if (pending) return pending;
   }
 
-  debugApi("response", {
-    method,
-    url,
-    status: res.status,
-    ok: res.ok,
-    statusText: res.statusText,
-  });
-
-  if (options.blob) {
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: "Download failed" }));
-      console.error("[API] download failed", { url, status: res.status, err });
-      throw new Error(err.message || "Download failed");
+  const pending = performRequest(url, { ...options, headers }, method).then(
+    (data) => {
+      if (method === "GET" && !options.blob) {
+        getCache.set(cacheKey, {
+          data,
+          expiresAt: Date.now() + GET_CACHE_TTL_MS,
+        });
+      } else {
+        getCache.clear();
+      }
+      return data;
     }
-    return res.blob();
+  );
+
+  if (method === "GET" && !options.blob) {
+    inFlightGets.set(cacheKey, pending);
+    pending.finally(() => inFlightGets.delete(cacheKey)).catch(() => {});
   }
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    console.error("[API] request failed", {
-      method,
-      url,
-      status: res.status,
-      body: data,
-    });
-    throw new Error(data.message || `Request failed (${res.status})`);
+  return pending;
+}
+
+async function performRequest(url, options, method) {
+  const retries = Number.isFinite(options.retries)
+    ? Math.max(0, options.retries)
+    : method === "GET"
+      ? 2
+      : 0;
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let res;
+
+    try {
+      res = await fetch(url, {
+        ...options,
+        signal: options.signal || controller.signal,
+      });
+    } catch (err) {
+      lastError = err;
+      if (attempt >= retries || options.signal?.aborted) break;
+      await delay(600 * 2 ** attempt);
+      continue;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if ([408, 429, 502, 503, 504].includes(res.status) && attempt < retries) {
+      await res.body?.cancel().catch(() => {});
+      await delay(600 * 2 ** attempt);
+      continue;
+    }
+
+    if (options.blob) {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Download failed" }));
+        throw new Error(err.message || "Download failed");
+      }
+      return res.blob();
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.message || `Request failed (${res.status})`);
+    }
+    return data;
   }
-  return data;
+
+  const reason =
+    lastError?.name === "AbortError"
+      ? "The server took too long to respond."
+      : "The server is temporarily unreachable.";
+  throw new Error(`${reason} Please try again.`);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export const api = {
@@ -134,6 +133,7 @@ export const api = {
     request("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
+      retries: 3,
     }),
   register: (name, email, password) =>
     request("/api/auth/register", {
@@ -260,14 +260,15 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   analysis: (params = {}) => request(`/api/analysis${query(params)}`),
-  downloadAnalysisMarkdown: async (params = {}) => {
-    const blob = await request(`/api/analysis/markdown${query(params)}`, {
+  downloadAnalysisReport: async (type, params = {}) => {
+    const blob = await request(`/api/analysis/${type}${query(params)}`, {
       blob: true,
     });
+    const ext = type === "excel" ? "xlsx" : "docx";
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `cfo-analysis-${new Date().toISOString().slice(0, 10)}.md`;
+    a.download = `cfo-analysis-${new Date().toISOString().slice(0, 10)}.${ext}`;
     document.body.appendChild(a);
     a.click();
     a.remove();

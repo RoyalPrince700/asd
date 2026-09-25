@@ -46,5 +46,8 @@ const stockRecordSchema = new mongoose.Schema(
 );
 
 stockRecordSchema.index({ date: -1, productName: 1, company: 1, location: 1 });
+stockRecordSchema.index({ company: 1, location: 1, date: -1 });
+stockRecordSchema.index({ company: 1, productName: 1, location: 1 });
+stockRecordSchema.index({ enteredBy: 1, date: -1 });
 
 module.exports = mongoose.model("StockRecord", stockRecordSchema);

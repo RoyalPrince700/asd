@@ -87,6 +87,8 @@ const TRIFONE_CATALOG_FIELDS = [
 ];
 
 const ELECTRONICS_CATALOG_FIELDS = [
+  { key: "itemCode", label: "Item Code", type: "text" },
+  { key: "costPrice", label: "Cost Price", type: "money" },
   { key: "openingStock", label: "Opening Stock", type: "count" },
   { key: "closingStock", label: "Closing Stock", type: "count" },
 ];
@@ -218,7 +220,10 @@ function normalizeElectronicsData(data) {
   const openingStock = Number(raw.openingStock ?? raw.currentStock ?? 0) || 0;
   const closingStock =
     Number(raw.closingStock ?? raw.currentStock ?? openingStock) || 0;
-  return { openingStock, closingStock };
+  const costPrice = Number(raw.costPrice) || 0;
+  const itemCode = String(raw.itemCode || "").trim();
+  const itemName = String(raw.itemName || "").trim();
+  return { openingStock, closingStock, costPrice, itemCode, itemName };
 }
 
 function emptyTrifoneData() {
@@ -226,7 +231,13 @@ function emptyTrifoneData() {
 }
 
 function emptyElectronicsData() {
-  return { openingStock: 0, closingStock: 0 };
+  return {
+    itemCode: "",
+    itemName: "",
+    costPrice: 0,
+    openingStock: 0,
+    closingStock: 0,
+  };
 }
 
 function normalizePressData(data) {

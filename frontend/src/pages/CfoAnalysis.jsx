@@ -16,10 +16,26 @@ import {
 } from "recharts";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext.jsx";
-import { COMPANY_OPTIONS, companyLabel } from "../constants/companies";
+import { companyLabel } from "../constants/companies";
 import { roleLabel } from "../utils/role.js";
 
 const CHART_COLORS = ["#132337", "#1f6b4a", "#b08a2d", "#9a3412", "#1c334d", "#57534e"];
+
+const ANALYSIS_COMPANIES = [
+  { id: "", label: "All companies" },
+  { id: "accessible", label: "Accessible Publishers Limited" },
+  { id: "trifone", label: "Trifone Gadgets" },
+  { id: "electronics", label: "Trifone Electronics" },
+  { id: "press", label: "Press (Raw Materials)" },
+];
+
+const STOCK_LEVELS = [
+  { id: "", label: "All stock" },
+  { id: "low", label: "Low stock (6–20)" },
+  { id: "alert", label: "Alert (1–5)" },
+  { id: "low-or-alert", label: "Low or alert" },
+  { id: "out", label: "Out of stock" },
+];
 
 const HEALTH_COLORS = {
   outOfStock: "#b42318",
@@ -99,12 +115,22 @@ export function CfoAnalysis() {
   const { user } = useAuth();
   const [view, setView] = useState("charts");
   const [showMarkdown, setShowMarkdown] = useState(false);
-  const [filters, setFilters] = useState({ company: "", from: "", to: "" });
-  const [applied, setApplied] = useState({ company: "", from: "", to: "" });
+  const [filters, setFilters] = useState({
+    company: "",
+    from: "",
+    to: "",
+    stockLevel: "",
+  });
+  const [applied, setApplied] = useState({
+    company: "",
+    from: "",
+    to: "",
+    stockLevel: "",
+  });
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [downloading, setDownloading] = useState(false);
+  const [downloading, setDownloading] = useState("");
 
   const showApl = !applied.company || applied.company === "accessible";
   const showTrifone = !applied.company || applied.company === "trifone";
@@ -134,15 +160,28 @@ export function CfoAnalysis() {
     load(filters).catch((err) => setError(err.message));
   }
 
-  async function downloadMarkdown() {
-    setDownloading(true);
+  function selectCompany(nextCompany) {
+    if (nextCompany === applied.company) return;
+    const next = { ...applied, company: nextCompany };
+    setFilters((current) => ({ ...current, company: nextCompany }));
+    setApplied(next);
+    load(next).catch((err) => setError(err.message));
+  }
+
+  async function download(type) {
+    setDownloading(type);
     setError("");
     try {
-      await api.downloadAnalysisMarkdown(applied);
+      await api.downloadAnalysisReport(type, {
+        company: applied.company,
+        from: filters.from,
+        to: filters.to,
+        stockLevel: filters.stockLevel,
+      });
     } catch (err) {
       setError(err.message);
     } finally {
-      setDownloading(false);
+      setDownloading("");
     }
   }
 
@@ -180,7 +219,7 @@ export function CfoAnalysis() {
           <p className="eyebrow">{roleLabel(user?.role)}</p>
           <h1>Analysis</h1>
           <p className="lede tight">
-            Inventory, revenue, and margin insights across APL, Trifone Gadgets, Trifone Electronics, and Press raw materials — drawn from live catalogues and ledger movement.
+            Inventory, revenue, and margin for the selected company. Word and Excel list that company's products, quantity left, and value. Stock level narrows the file to low or alert items.
           </p>
         </div>
         <div className="export-row">
@@ -194,13 +233,35 @@ export function CfoAnalysis() {
           <button
             type="button"
             className="ghost"
-            disabled={downloading}
-            onClick={downloadMarkdown}
+            disabled={Boolean(downloading)}
+            onClick={() => download("docx")}
           >
-            {downloading ? "Preparing…" : "Download .md"}
+            {downloading === "docx" ? "Preparing…" : "Download Word"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(downloading)}
+            onClick={() => download("excel")}
+          >
+            {downloading === "excel" ? "Preparing…" : "Download Excel"}
           </button>
         </div>
       </header>
+
+      <div className="company-tabs" role="tablist" aria-label="Company analysis">
+        {ANALYSIS_COMPANIES.map((item) => (
+          <button
+            key={item.id || "all"}
+            type="button"
+            role="tab"
+            aria-selected={applied.company === item.id}
+            className={applied.company === item.id ? "company-tab active" : "company-tab"}
+            onClick={() => selectCompany(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
 
       <div className="analysis-toolbar">
         <div className="view-toggle" role="tablist" aria-label="Analysis view">
@@ -227,20 +288,6 @@ export function CfoAnalysis() {
 
       <form className="filter-bar" onSubmit={applyFilters}>
         <label>
-          Company
-          <select
-            value={filters.company}
-            onChange={(e) => setFilters((p) => ({ ...p, company: e.target.value }))}
-          >
-            <option value="">All companies</option>
-            {COMPANY_OPTIONS.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
           From
           <input
             type="date"
@@ -256,6 +303,19 @@ export function CfoAnalysis() {
             onChange={(e) => setFilters((p) => ({ ...p, to: e.target.value }))}
           />
         </label>
+        <label>
+          Stock level
+          <select
+            value={filters.stockLevel}
+            onChange={(e) => setFilters((p) => ({ ...p, stockLevel: e.target.value }))}
+          >
+            {STOCK_LEVELS.map((item) => (
+              <option key={item.id || "all"} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="submit" disabled={loading}>
           {loading ? "Loading…" : "Apply"}
         </button>
@@ -266,7 +326,7 @@ export function CfoAnalysis() {
       {showMarkdown && data?.markdown ? (
         <section className="panel md-panel">
           <div className="section-head">
-            <h2>Markdown report</h2>
+            <h2>Report</h2>
             <small className="hint">
               Generated {new Date(data.generatedAt).toLocaleString()}
             </small>

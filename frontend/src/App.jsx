@@ -1,29 +1,35 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import { ProtectedRoute } from "./components/ProtectedRoute.jsx";
 import { Layout } from "./components/Layout.jsx";
 import { Login } from "./pages/Login.jsx";
 import { Signup } from "./pages/Signup.jsx";
-import { ClerkHome } from "./pages/ClerkHome.jsx";
-import { StaffOverview } from "./pages/StaffOverview.jsx";
-import { StaffStockList } from "./pages/StaffStockList.jsx";
 import { AssignedStaffRoute } from "./components/AssignedStaffRoute.jsx";
-import { CfoHome } from "./pages/CfoHome.jsx";
-import { CfoLedger } from "./pages/CfoLedger.jsx";
-import { CfoProducts } from "./pages/CfoProducts.jsx";
-import { CfoStaff } from "./pages/CfoStaff.jsx";
-import { CfoAnalysis } from "./pages/CfoAnalysis.jsx";
-import { CfoEditedLedger } from "./pages/CfoEditedLedger.jsx";
-import { CfoRequests } from "./pages/CfoRequests.jsx";
-import { MyRequests } from "./pages/MyRequests.jsx";
-import { AdminHome } from "./pages/AdminHome.jsx";
-import { AccountantMovement } from "./pages/AccountantMovement.jsx";
-import { AccountantInventory } from "./pages/AccountantInventory.jsx";
-import { TrifoneMovement } from "./pages/TrifoneMovement.jsx";
-import { TrifoneInventory } from "./pages/TrifoneInventory.jsx";
-import { PressMovement } from "./pages/PressMovement.jsx";
-import { PressInventory } from "./pages/PressInventory.jsx";
 import { homeForRole } from "./utils/role.js";
+
+const ClerkHome = lazyNamed(() => import("./pages/ClerkHome.jsx"), "ClerkHome");
+const StaffOverview = lazyNamed(() => import("./pages/StaffOverview.jsx"), "StaffOverview");
+const StaffStockList = lazyNamed(() => import("./pages/StaffStockList.jsx"), "StaffStockList");
+const CfoHome = lazyNamed(() => import("./pages/CfoHome.jsx"), "CfoHome");
+const CfoLedger = lazyNamed(() => import("./pages/CfoLedger.jsx"), "CfoLedger");
+const CfoProducts = lazyNamed(() => import("./pages/CfoProducts.jsx"), "CfoProducts");
+const CfoStaff = lazyNamed(() => import("./pages/CfoStaff.jsx"), "CfoStaff");
+const CfoAnalysis = lazyNamed(() => import("./pages/CfoAnalysis.jsx"), "CfoAnalysis");
+const CfoEditedLedger = lazyNamed(() => import("./pages/CfoEditedLedger.jsx"), "CfoEditedLedger");
+const CfoRequests = lazyNamed(() => import("./pages/CfoRequests.jsx"), "CfoRequests");
+const MyRequests = lazyNamed(() => import("./pages/MyRequests.jsx"), "MyRequests");
+const AdminHome = lazyNamed(() => import("./pages/AdminHome.jsx"), "AdminHome");
+const AccountantMovement = lazyNamed(() => import("./pages/AccountantMovement.jsx"), "AccountantMovement");
+const AccountantInventory = lazyNamed(() => import("./pages/AccountantInventory.jsx"), "AccountantInventory");
+const TrifoneMovement = lazyNamed(() => import("./pages/TrifoneMovement.jsx"), "TrifoneMovement");
+const TrifoneInventory = lazyNamed(() => import("./pages/TrifoneInventory.jsx"), "TrifoneInventory");
+const PressMovement = lazyNamed(() => import("./pages/PressMovement.jsx"), "PressMovement");
+const PressInventory = lazyNamed(() => import("./pages/PressInventory.jsx"), "PressInventory");
+
+function lazyNamed(loader, name) {
+  return lazy(() => loader().then((module) => ({ default: module[name] })));
+}
 
 export default function App() {
   const { ready } = useAuth();
@@ -38,6 +44,7 @@ export default function App() {
   }
 
   return (
+    <Suspense fallback={<div className="boot"><p>Loading page…</p></div>}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
@@ -192,6 +199,7 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }
 

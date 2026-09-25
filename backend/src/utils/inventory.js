@@ -282,6 +282,114 @@ async function parseElectronicsNamesExcel(buffer) {
   return parseProductNamesExcel(buffer);
 }
 
+function findElectronicsPriceListHeader(sheet) {
+  const maxScan = Math.min(Math.max(sheet.rowCount || 1, 1), 25);
+  for (let rowNumber = 1; rowNumber <= maxScan; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    let hasItemName = false;
+    let hasItemCode = false;
+    row.eachCell({ includeEmpty: false }, (cell) => {
+      const header = normalizeHeader(cell.value);
+      if (/^item\s*name$/i.test(header)) hasItemName = true;
+      if (/^item\s*code$/i.test(header)) hasItemCode = true;
+    });
+    if (hasItemName || hasItemCode) return rowNumber;
+  }
+  return null;
+}
+
+function findElectronicsPriceListSheet(workbook) {
+  return (
+    workbook.worksheets.find((sheet) => findElectronicsPriceListHeader(sheet)) ||
+    workbook.worksheets[0]
+  );
+}
+
+function electronicsCatalogName(itemCode, itemName) {
+  const code = String(itemCode || "").trim();
+  const name = String(itemName || "").trim();
+  if (code && name) return `${code} - ${name}`;
+  return name || code;
+}
+
+/**
+ * Trifone Electronics price list: Item Code + Item name + Cost Price.
+ * Opening (in) and closing (out) are always 0 — staff post movement later.
+ */
+async function parseElectronicsCatalogExcel(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const sheet = findElectronicsPriceListSheet(workbook);
+  if (!sheet) {
+    throw new Error("The Excel file has no worksheets.");
+  }
+
+  const headerRowNumber = findElectronicsPriceListHeader(sheet);
+  if (!headerRowNumber) {
+    const names = await parseElectronicsNamesExcel(buffer);
+    return names.map((name) => ({
+      name,
+      electronicsData: {
+        ...emptyElectronicsData(),
+        itemName: name,
+        openingStock: 0,
+        closingStock: 0,
+      },
+    }));
+  }
+
+  const headerRow = sheet.getRow(headerRowNumber);
+  const headers = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber] = normalizeHeader(cell.value);
+  });
+
+  const codeCol = headers.findIndex(
+    (header) => header && /^item\s*code$/i.test(header)
+  );
+  let nameCol = headers.findIndex(
+    (header) => header && /^item\s*name$/i.test(header)
+  );
+  if (nameCol < 1) {
+    nameCol = findNameColumn(headers);
+  }
+  const costPriceCol = headers.findIndex(
+    (header) => header && COST_PRICE_HEADER.test(header)
+  );
+
+  const byName = new Map();
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= headerRowNumber) return;
+
+    const itemCode = codeCol >= 1 ? cellText(row.getCell(codeCol).value) : "";
+    const itemName = nameCol >= 1 ? cellText(row.getCell(nameCol).value) : "";
+    if (!itemCode && !itemName) return;
+    if (/^item\s*(name|code)$/i.test(itemName)) return;
+    if (!isCatalogProductName(itemName || itemCode)) return;
+
+    const name = electronicsCatalogName(itemCode, itemName);
+    if (!name || byName.has(name)) return;
+
+    const costPrice =
+      costPriceCol >= 1 ? parsePrice(row.getCell(costPriceCol).value) : 0;
+
+    byName.set(name, {
+      name,
+      electronicsData: {
+        ...emptyElectronicsData(),
+        itemCode,
+        itemName: itemName || itemCode,
+        costPrice,
+        openingStock: 0,
+        closingStock: 0,
+      },
+    });
+  });
+
+  return [...byName.values()];
+}
+
 async function parseCatalogNamesExcel(buffer, company) {
   if (company === COMPANIES.TRIFONE) {
     return parseTrifoneNamesExcel(buffer);
@@ -938,6 +1046,7 @@ module.exports = {
   parseAccessibleCatalogExcel,
   parseTrifoneCatalogExcel,
   parsePressCatalogExcel,
+  parseElectronicsCatalogExcel,
   parseCatalogNamesExcel,
   namesToCatalogRows,
   parseAccessibleInventoryExcel,

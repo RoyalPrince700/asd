@@ -26,6 +26,7 @@ const {
   parseCatalogNamesExcel,
   parseAccessibleCatalogExcel,
   parseTrifoneCatalogExcel,
+  parseElectronicsCatalogExcel,
   parsePressCatalogExcel,
   namesToCatalogRows,
   getCurrentStock,
@@ -254,14 +255,16 @@ router.get("/my-inventory", requireRole("clerk", "accountant", "trifone", "press
     filter.name = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
   }
 
-  const total = await Product.countDocuments(filter);
-  const rows = await Product.find(filter)
-    .sort({ name: 1 })
-    .skip((page - 1) * limit)
-    .limit(limit)
-    .select("name company stock salePrice trifoneData electronicsData pressData");
-
-  const movementMap = await buildMovementMap(company, location);
+  const [total, rows, movementMap] = await Promise.all([
+    Product.countDocuments(filter),
+    Product.find(filter)
+      .sort({ name: 1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .select("name company stock salePrice trifoneData electronicsData pressData")
+      .lean(),
+    buildMovementMap(company, location),
+  ]);
 
   const products = rows.map((row) => {
     if (isLocationlessCompany(company)) {
@@ -314,19 +317,17 @@ router.get("/", asyncHandler(async (req, res) => {
   if (page > 0 && limit > 0) {
     const safeLimit = Math.min(100, Math.max(1, limit));
     const safePage = Math.max(1, page);
-    const total = await Product.countDocuments(filter);
-    const rows = await Product.find(filter)
-      .sort({ name: 1 })
-      .skip((safePage - 1) * safeLimit)
-      .limit(safeLimit)
-      .select("name company stock salePrice trifoneData electronicsData pressData");
-
-    let movementMap = null;
-    if (live && company) {
-      movementMap = await buildMovementMap(company);
-    }
-
-    const hiddenColumns = company ? await getHiddenColumns(company) : [];
+    const [total, rows, movementMap, hiddenColumns] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter)
+        .sort({ name: 1 })
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
+        .select("name company stock salePrice trifoneData electronicsData pressData")
+        .lean(),
+      live && company ? buildMovementMap(company) : null,
+      company ? getHiddenColumns(company) : [],
+    ]);
     const locations =
       company === COMPANIES.ACCESSIBLE ? visibleAccessibleLocations(hiddenColumns) : [];
     const trifoneFields =
@@ -440,6 +441,15 @@ router.get("/template", requireRole("cfo", "md"), asyncHandler(async (req, res) 
     sheet.addRow({ name: "Example material 1", qtyUsed: 500, opening: 500, closing: 500 });
     sheet.addRow({ name: "Example material 2", qtyUsed: 25, opening: 25, closing: 25 });
     sheet.addRow({ name: "Example material 3", qtyUsed: 0, opening: 0, closing: 0 });
+  } else if (company === COMPANIES.ELECTRONICS) {
+    sheet.columns = [
+      { header: "Item Code", key: "itemCode", width: 18 },
+      { header: "Item name", key: "name", width: 28 },
+      { header: "Cost Price (N)", key: "costPrice", width: 18 },
+    ];
+    sheet.addRow({ itemCode: "TB / 15E", name: "BLENDER", costPrice: 13000 });
+    sheet.addRow({ itemCode: "1F / 16A", name: "SOLAR FAN", costPrice: 44000 });
+    sheet.addRow({ itemCode: "10LTR DIGITAL", name: "AIR FRYER", costPrice: 40000 });
   } else {
     sheet.columns = [
       { header: nameHeader, key: "name", width: 42 },
@@ -640,6 +650,8 @@ router.post(
       rows = await parseTrifoneCatalogExcel(req.file.buffer);
     } else if (company === COMPANIES.PRESS) {
       rows = await parsePressCatalogExcel(req.file.buffer);
+    } else if (company === COMPANIES.ELECTRONICS) {
+      rows = await parseElectronicsCatalogExcel(req.file.buffer);
     } else {
       const names = await parseCatalogNamesExcel(req.file.buffer, company);
       rows = namesToCatalogRows(names, company);
@@ -651,7 +663,7 @@ router.post(
           company === COMPANIES.TRIFONE
             ? "No product names found. Use a column headed ITEM NAME or Item Name. Optionally include a Cost Price column."
             : company === COMPANIES.ELECTRONICS
-              ? "No product names found. Use a column headed Item Name, or product names across the top row."
+              ? "No products found. Use columns Item Code, Item name, and Cost Price. In and out start at zero."
             : company === COMPANIES.PRESS
               ? "No product names found. Use a column headed MATERIALS ITEM. Optionally include QTY USED, Opening Stock, or Closing Stock."
             : "No product names found. Use a column headed BookName or Item Name. Optionally include a Sale Price column.",

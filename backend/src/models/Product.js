@@ -19,6 +19,9 @@ const trifoneDataSchema = new mongoose.Schema(
 
 const electronicsDataSchema = new mongoose.Schema(
   {
+    itemCode: { type: String, default: "", trim: true },
+    itemName: { type: String, default: "", trim: true },
+    costPrice: { type: Number, default: 0, min: 0 },
     openingStock: { type: Number, default: 0, min: 0 },
     closingStock: { type: Number, default: 0, min: 0 },
   },

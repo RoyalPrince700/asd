@@ -147,8 +147,139 @@ function summarizeRecords(records) {
   };
 }
 
+async function summarizeRecordsFromDb(StockRecord, filter = {}) {
+  const [result] = await StockRecord.aggregate([
+    { $match: filter },
+    {
+      $facet: {
+        totals: [
+          {
+            $group: {
+              _id: null,
+              openingBalance: { $sum: "$openingBalance" },
+              inbound: { $sum: "$inbound" },
+              outbound: { $sum: "$outbound" },
+              stockReceived: { $sum: "$stockReceived" },
+              stockOut: { $sum: "$stockOut" },
+              closingBalance: { $sum: "$closingBalance" },
+              recordCount: { $sum: 1 },
+            },
+          },
+        ],
+        byProduct: [
+          {
+            $group: {
+              _id: "$productName",
+              openingBalance: { $sum: "$openingBalance" },
+              inbound: { $sum: "$inbound" },
+              outbound: { $sum: "$outbound" },
+              stockReceived: { $sum: "$stockReceived" },
+              stockOut: { $sum: "$stockOut" },
+              closingBalance: { $sum: "$closingBalance" },
+              recordCount: { $sum: 1 },
+            },
+          },
+          { $sort: { _id: 1 } },
+          {
+            $project: {
+              _id: 0,
+              productName: "$_id",
+              openingBalance: 1,
+              inbound: 1,
+              outbound: 1,
+              stockReceived: 1,
+              stockOut: 1,
+              closingBalance: 1,
+              recordCount: 1,
+            },
+          },
+        ],
+        byCompany: [
+          {
+            $group: {
+              _id: { $ifNull: ["$company", "unknown"] },
+              openingBalance: { $sum: "$openingBalance" },
+              inbound: { $sum: "$inbound" },
+              outbound: { $sum: "$outbound" },
+              stockReceived: { $sum: "$stockReceived" },
+              stockOut: { $sum: "$stockOut" },
+              closingBalance: { $sum: "$closingBalance" },
+              recordCount: { $sum: 1 },
+            },
+          },
+          { $sort: { _id: 1 } },
+          {
+            $project: {
+              _id: 0,
+              company: "$_id",
+              openingBalance: 1,
+              inbound: 1,
+              outbound: 1,
+              stockReceived: 1,
+              stockOut: 1,
+              closingBalance: 1,
+              recordCount: 1,
+            },
+          },
+        ],
+        byDate: [
+          {
+            $group: {
+              _id: {
+                $dateToString: {
+                  format: "%Y-%m-%d",
+                  date: "$date",
+                  timezone: "UTC",
+                },
+              },
+              inbound: { $sum: "$inbound" },
+              outbound: { $sum: "$outbound" },
+              stockReceived: { $sum: "$stockReceived" },
+              stockOut: { $sum: "$stockOut" },
+              closingBalance: { $sum: "$closingBalance" },
+            },
+          },
+          { $sort: { _id: 1 } },
+          {
+            $project: {
+              _id: 0,
+              date: "$_id",
+              inbound: 1,
+              outbound: 1,
+              stockReceived: 1,
+              stockOut: 1,
+              closingBalance: 1,
+            },
+          },
+        ],
+      },
+    },
+  ]).allowDiskUse(true);
+
+  const totals = result?.totals?.[0] || {
+    openingBalance: 0,
+    inbound: 0,
+    outbound: 0,
+    stockReceived: 0,
+    stockOut: 0,
+    closingBalance: 0,
+    recordCount: 0,
+  };
+  delete totals._id;
+  totals.netMovement =
+    totals.inbound + totals.stockReceived - totals.outbound - totals.stockOut;
+
+  return {
+    totals,
+    byProduct: result?.byProduct || [],
+    byCompany: result?.byCompany || [],
+    byDate: result?.byDate || [],
+  };
+}
+
 module.exports = {
   computeClosingBalance,
   normalizeRecordInput,
   summarizeRecords,
+  summarizeRecordsFromDb,
 };

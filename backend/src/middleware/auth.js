@@ -12,7 +12,7 @@ async function protect(req, res, next) {
 
   try {
     const payload = jwt.verify(token, jwtSecret);
-    const user = await User.findById(payload.id).select("-password");
+    const user = await User.findById(payload.id).select("-password").lean();
 
     if (!user) {
       return res.status(401).json({ message: "User not found" });

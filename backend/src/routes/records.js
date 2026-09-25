@@ -6,7 +6,7 @@ const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const {
   normalizeRecordInput,
-  summarizeRecords,
+  summarizeRecordsFromDb,
   computeClosingBalance,
 } = require("../utils/stock");
 const { COMPANIES, isValidCompany, ACCESSIBLE_LOCATIONS, isLocationlessCompany, isTrifoneCompany, isPressCompany, TRIFONE_ROLE_COMPANIES, companyLabel } = require("../constants/companies");
@@ -192,12 +192,16 @@ router.get("/", asyncHandler(async (req, res) => {
   const limit = parseInt(req.query.limit, 10);
 
   if (page > 0 && limit > 0) {
-    const total = await StockRecord.countDocuments(filter);
-    const records = await StockRecord.find(filter)
-      .populate("enteredBy", "name email role")
-      .sort({ date: -1, createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
+    const safeLimit = Math.min(100, Math.max(1, limit));
+    const [total, records] = await Promise.all([
+      StockRecord.countDocuments(filter),
+      StockRecord.find(filter)
+        .populate("enteredBy", "name email role")
+        .sort({ date: -1, createdAt: -1 })
+        .skip((page - 1) * safeLimit)
+        .limit(safeLimit)
+        .lean(),
+    ]);
 
     const pendingMap = await pendingChangeMapForRecords(
       records.map((record) => record._id)
@@ -207,15 +211,16 @@ router.get("/", asyncHandler(async (req, res) => {
       records: attachPendingMeta(records, pendingMap),
       total,
       page,
-      limit,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
+      limit: safeLimit,
+      totalPages: Math.max(1, Math.ceil(total / safeLimit)),
     });
     return;
   }
 
   const records = await StockRecord.find(filter)
     .populate("enteredBy", "name email role")
-    .sort({ date: -1, createdAt: -1 });
+    .sort({ date: -1, createdAt: -1 })
+    .lean();
 
   const pendingMap = await pendingChangeMapForRecords(
     records.map((record) => record._id)
@@ -260,7 +265,6 @@ router.get("/products", asyncHandler(async (req, res) => {
 
 router.get("/summary", requireRole("cfo", "md"), asyncHandler(async (req, res) => {
   const filter = buildFilter(req.query);
-  const records = await StockRecord.find(filter).sort({ date: 1 });
 
   const productQuery = {};
   const company = String(req.query.company || "").trim().toLowerCase();
@@ -268,10 +272,13 @@ router.get("/summary", requireRole("cfo", "md"), asyncHandler(async (req, res) =
     productQuery.company = company;
   }
 
-  const productCount = await Product.countDocuments(productQuery);
+  const [summary, productCount] = await Promise.all([
+    summarizeRecordsFromDb(StockRecord, filter),
+    Product.countDocuments(productQuery),
+  ]);
 
   res.json({
-    ...summarizeRecords(records),
+    ...summary,
     productCount,
   });
 }));
@@ -287,13 +294,13 @@ router.get("/my-summary", requireRole("clerk"), asyncHandler(async (req, res) =>
     filter.location = req.user.location;
   }
 
-  const records = await StockRecord.find(filter).sort({ date: 1 });
-  const productCount = await Product.countDocuments(
-    filter.company ? { company: filter.company } : {}
-  );
+  const [summary, productCount] = await Promise.all([
+    summarizeRecordsFromDb(StockRecord, filter),
+    Product.countDocuments(filter.company ? { company: filter.company } : {}),
+  ]);
 
   res.json({
-    ...summarizeRecords(records),
+    ...summary,
     productCount,
     assignment: {
       company: filter.company || null,

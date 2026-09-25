@@ -136,6 +136,7 @@ function analyzeAccessibleProducts(products, movementMap, aplRecords = []) {
       byLocation: {},
     };
 
+    const unitPrice = Number(product.salePrice) || 0;
     totalStockUnits += allTotal;
     const status = stockStatus(allTotal);
     healthCounts[status] += 1;
@@ -164,6 +165,9 @@ function analyzeAccessibleProducts(products, movementMap, aplRecords = []) {
       recordCount: movement.recordCount,
       turnoverRate,
       status,
+      unitPrice,
+      stockValue: allTotal * unitPrice,
+      priceBasis: "Sale price",
     });
   }
 
@@ -348,6 +352,25 @@ function analyzeAccessibleProducts(products, movementMap, aplRecords = []) {
     locationLowStock,
     stockHealth,
     performerChart,
+    stockWatch: productRows
+      .filter((row) => row.status === "outOfStock" || row.status === "critical" || row.status === "low")
+      .map((row) => ({
+        name: row.name,
+        itemCode: "",
+        balance: row.totalStock,
+        status: row.status,
+        inbound: row.inbound,
+        outbound: row.outbound,
+      })),
+    catalogRows: productRows.map((row) => ({
+      name: row.name,
+      itemCode: "",
+      balance: row.totalStock,
+      unitPrice: row.unitPrice,
+      stockValue: row.stockValue,
+      priceBasis: row.priceBasis,
+      status: row.status,
+    })),
   };
 }
 
@@ -377,6 +400,7 @@ function analyzeTrifoneProducts(products, movementMap) {
     productRows.push({
       name: product.name,
       currentStock,
+      status: stockStatus(currentStock),
       unitsSold,
       costPrice,
       unitPrice,
@@ -516,6 +540,25 @@ function analyzeTrifoneProducts(products, movementMap) {
     financialOverview,
     outOfStockItems,
     productRows: productRows.slice(0, 20),
+    stockWatch: productRows
+      .filter((row) => row.status === "outOfStock" || row.status === "critical" || row.status === "low")
+      .map((row) => ({
+        name: row.name,
+        itemCode: "",
+        balance: row.currentStock,
+        status: row.status,
+        inbound: 0,
+        outbound: 0,
+      })),
+    catalogRows: productRows.map((row) => ({
+      name: row.name,
+      itemCode: "",
+      balance: row.currentStock,
+      unitPrice: Number(row.costPrice) || 0,
+      stockValue: row.currentStock * (Number(row.costPrice) || 0),
+      priceBasis: "Cost price",
+      status: row.status,
+    })),
   };
 }
 
@@ -540,6 +583,11 @@ function analyzeElectronicsProducts(products, movementMap, records = []) {
   for (const product of products) {
     const currentStock = liveLocationlessBalance(product, movementMap);
     const movement = movementByProduct.get(product.name) || { inbound: 0, outbound: 0 };
+    const isPress = product.company === COMPANIES.PRESS;
+    const details = isPress
+      ? {}
+      : product.electronicsData?.toObject?.() || product.electronicsData || {};
+    const unitPrice = isPress ? 0 : Number(details.costPrice) || 0;
     totalCurrentStock += currentStock;
     const status = stockStatus(currentStock);
     if (status === "outOfStock") outOfStock += 1;
@@ -547,11 +595,15 @@ function analyzeElectronicsProducts(products, movementMap, records = []) {
     if (status === "low") lowStockCount += 1;
 
     productRows.push({
-      name: product.name,
+      name: details.itemName || product.name,
+      itemCode: details.itemCode || "",
       currentStock,
       inbound: movement.inbound,
       outbound: movement.outbound,
       status,
+      unitPrice,
+      stockValue: currentStock * unitPrice,
+      priceBasis: isPress ? "" : "Cost price",
     });
   }
 
@@ -590,6 +642,25 @@ function analyzeElectronicsProducts(products, movementMap, records = []) {
       .filter((row) => row.status === "outOfStock")
       .slice(0, 15)
       .map((row) => ({ name: row.name })),
+    stockWatch: productRows
+      .filter((row) => row.status === "outOfStock" || row.status === "critical" || row.status === "low")
+      .map((row) => ({
+        name: row.name,
+        itemCode: row.itemCode || "",
+        balance: row.currentStock,
+        status: row.status,
+        inbound: row.inbound,
+        outbound: row.outbound,
+      })),
+    catalogRows: productRows.map((row) => ({
+      name: row.name,
+      itemCode: row.itemCode || "",
+      balance: row.currentStock,
+      unitPrice: row.unitPrice,
+      stockValue: row.stockValue,
+      priceBasis: row.priceBasis,
+      status: row.status,
+    })),
   };
 }
 
@@ -874,18 +945,23 @@ async function buildAnalysis(query = {}) {
 
   const [aplProducts, trifoneProducts, electronicsProducts, pressProducts, records] = await Promise.all([
     companyFilter === "all" || companyFilter === COMPANIES.ACCESSIBLE
-      ? Product.find({ company: COMPANIES.ACCESSIBLE }).sort({ name: 1 })
+      ? Product.find({ company: COMPANIES.ACCESSIBLE }).sort({ name: 1 }).lean()
       : [],
     companyFilter === "all" || companyFilter === COMPANIES.TRIFONE
-      ? Product.find({ company: COMPANIES.TRIFONE }).sort({ name: 1 })
+      ? Product.find({ company: COMPANIES.TRIFONE }).sort({ name: 1 }).lean()
       : [],
     companyFilter === "all" || companyFilter === COMPANIES.ELECTRONICS
-      ? Product.find({ company: COMPANIES.ELECTRONICS }).sort({ name: 1 })
+      ? Product.find({ company: COMPANIES.ELECTRONICS }).sort({ name: 1 }).lean()
       : [],
     companyFilter === "all" || companyFilter === COMPANIES.PRESS
-      ? Product.find({ company: COMPANIES.PRESS }).sort({ name: 1 })
+      ? Product.find({ company: COMPANIES.PRESS }).sort({ name: 1 }).lean()
       : [],
-    StockRecord.find(recordFilter).sort({ date: -1 }),
+    StockRecord.find(recordFilter)
+      .select(
+        "productName company location date openingBalance inbound outbound stockReceived stockOut closingBalance"
+      )
+      .sort({ date: -1 })
+      .lean(),
   ]);
 
   const [aplMovementMap, trifoneMovementMap, electronicsMovementMap, pressMovementMap] = await Promise.all([
@@ -918,6 +994,32 @@ async function buildAnalysis(query = {}) {
     label: companyLabel(row.company, { short: true }),
   }));
 
+  const stockWatch = [
+    ...tagStockWatch(COMPANIES.ACCESSIBLE, accessible.stockWatch),
+    ...tagStockWatch(COMPANIES.TRIFONE, trifone.stockWatch),
+    ...tagStockWatch(COMPANIES.ELECTRONICS, electronics.stockWatch),
+    ...tagStockWatch(COMPANIES.PRESS, press.stockWatch),
+  ].sort(compareStockWatch);
+
+  const includeProducts = String(query.includeProducts || "") === "1";
+  const products = includeProducts
+    ? [
+        ...tagStockWatch(COMPANIES.ACCESSIBLE, accessible.catalogRows),
+        ...tagStockWatch(COMPANIES.TRIFONE, trifone.catalogRows),
+        ...tagStockWatch(COMPANIES.ELECTRONICS, electronics.catalogRows),
+        ...tagStockWatch(COMPANIES.PRESS, press.catalogRows),
+      ].sort(compareCatalog)
+    : undefined;
+
+  delete accessible.stockWatch;
+  delete trifone.stockWatch;
+  delete electronics.stockWatch;
+  delete press.stockWatch;
+  delete accessible.catalogRows;
+  delete trifone.catalogRows;
+  delete electronics.catalogRows;
+  delete press.catalogRows;
+
   const generatedAt = new Date().toISOString();
   const markdown = buildMarkdown({
     accessible,
@@ -941,8 +1043,76 @@ async function buildAnalysis(query = {}) {
       byCompany: movementByCompany,
       byDate: movement.byDate,
     },
+    stockWatch,
+    ...(products ? { products } : {}),
     markdown,
   };
 }
 
-module.exports = { buildAnalysis, fmtNum, fmtMoney };
+const STOCK_STATUS_RANK = { outOfStock: 0, critical: 1, low: 2 };
+
+function tagStockWatch(company, rows = []) {
+  const label = companyLabel(company, { short: true });
+  return rows.map((row) => ({
+    ...row,
+    company,
+    companyLabel: label,
+    statusLabel: stockStatusLabel(row.status),
+  }));
+}
+
+function compareCatalog(a, b) {
+  const byCompany = String(a.companyLabel).localeCompare(String(b.companyLabel));
+  if (byCompany) return byCompany;
+  return String(a.name).localeCompare(String(b.name));
+}
+
+function compareStockWatch(a, b) {
+  const byCompany = String(a.companyLabel).localeCompare(String(b.companyLabel));
+  if (byCompany) return byCompany;
+  const byStatus = (STOCK_STATUS_RANK[a.status] ?? 9) - (STOCK_STATUS_RANK[b.status] ?? 9);
+  if (byStatus) return byStatus;
+  const byBalance = Number(a.balance) - Number(b.balance);
+  if (byBalance) return byBalance;
+  return String(a.name).localeCompare(String(b.name));
+}
+
+function stockLevelStatuses(level) {
+  const value = String(level || "").trim().toLowerCase();
+  if (value === "low") return ["low"];
+  if (value === "alert") return ["critical"];
+  if (value === "low-or-alert") return ["low", "critical"];
+  if (value === "out") return ["outOfStock"];
+  return ["outOfStock", "critical", "low"];
+}
+
+function stockLevelLabel(level) {
+  const value = String(level || "").trim().toLowerCase();
+  if (value === "low") return "Low stock (6–20)";
+  if (value === "alert") return "Alert (1–5)";
+  if (value === "low-or-alert") return "Low or alert";
+  if (value === "out") return "Out of stock";
+  return "All stock";
+}
+
+function filterStockWatch(rows = [], level) {
+  const allowed = new Set(stockLevelStatuses(level));
+  return rows.filter((row) => allowed.has(row.status));
+}
+
+function filterCatalog(rows = [], level) {
+  const value = String(level || "").trim().toLowerCase();
+  if (!value || value === "all") return rows;
+  const allowed = new Set(stockLevelStatuses(value));
+  return rows.filter((row) => allowed.has(row.status));
+}
+
+module.exports = {
+  buildAnalysis,
+  fmtNum,
+  fmtMoney,
+  stockStatusLabel,
+  stockLevelLabel,
+  filterStockWatch,
+  filterCatalog,
+};
