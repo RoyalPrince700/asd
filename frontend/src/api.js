@@ -231,6 +231,36 @@ export const api = {
     }),
   deleteRecord: (id) =>
     request(`/api/records/${id}`, { method: "DELETE" }),
+  pressMaterials: (params = {}) =>
+    request(`/api/press-materials${query(params)}`),
+  createPressMaterial: (payload) =>
+    request("/api/press-materials", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  approvePressMaterial: (id) =>
+    request(`/api/press-materials/${id}/approve`, { method: "POST" }),
+  rejectPressMaterial: (id) =>
+    request(`/api/press-materials/${id}/reject`, { method: "POST" }),
+  pressDeletions: (params = {}) =>
+    request(`/api/press-deletions${query(params)}`),
+  deletionLogs: (params = {}) =>
+    request(`/api/deletion-logs${query(params)}`),
+  downloadTransactionReport: async (type, params = {}) => {
+    const blob = await request(`/api/reports/transactions/${type}${query(params)}`, {
+      blob: true,
+    });
+    const ext = type === "excel" ? "xlsx" : "docx";
+    const month = params.month || "report";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `transactions-${month}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   downloadReport: async (type, params = {}) => {
     const blob = await request(`/api/reports/${type}${query(params)}`, {
       blob: true,

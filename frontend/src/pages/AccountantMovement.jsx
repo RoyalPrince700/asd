@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { GroupedTransactions } from "../components/GroupedTransactions.jsx";
 import { SearchableSelect } from "../components/SearchableSelect.jsx";
-import { RemarkTag } from "../components/RemarkTag.jsx";
 import { MovementUpload } from "../components/MovementUpload.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
 import {
@@ -14,6 +14,7 @@ import {
   DEFAULT_TRANSACTION_REMARK,
   TRANSACTION_REMARKS,
 } from "../constants/transactionRemarks.js";
+import { materialKey } from "../utils/transactionGroups.js";
 
 const emptyForm = {
   productName: "",
@@ -42,14 +43,14 @@ export function AccountantMovement() {
   const [form, setForm] = useState(emptyForm);
   const [products, setProducts] = useState([]);
   const [records, setRecords] = useState([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [expandKey, setExpandKey] = useState("");
+  const [expandSignal, setExpandSignal] = useState(0);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [stockIdSearch, setStockIdSearch] = useState("");
-  const [appliedStockId, setAppliedStockId] = useState("");
-
   const isLocationless = isLocationlessCompany(company);
   const scopeReady = isLocationless || Boolean(location);
 
@@ -66,13 +67,17 @@ export function AccountantMovement() {
     return names;
   }, [products, form.productName]);
 
-  async function loadRecords(nextStockId = appliedStockId) {
+  async function loadRecords() {
     if (!scopeReady) return;
-    const params = { company };
-    if (!isLocationless) params.location = location;
-    if (nextStockId) params.stockId = nextStockId;
-    const data = await api.records(params);
-    setRecords(data.records);
+    setListLoading(true);
+    try {
+      const params = { company };
+      if (!isLocationless) params.location = location;
+      const data = await api.records(params);
+      setRecords(data.records || []);
+    } finally {
+      setListLoading(false);
+    }
   }
 
   async function loadProducts() {
@@ -148,10 +153,11 @@ export function AccountantMovement() {
         setNotice(successMessage);
       }
 
+      const postedKey = materialKey(form.productName);
       resetForm();
-      setStockIdSearch("");
-      setAppliedStockId("");
-      await loadRecords("");
+      setExpandKey(postedKey);
+      setExpandSignal((value) => value + 1);
+      await loadRecords();
       toast({
         message: successMessage,
         type: "success",
@@ -211,8 +217,9 @@ export function AccountantMovement() {
         </div>
         <p className="lede tight">
           Select a company and location, then post In or Out on behalf of any clerk.
-          Edits to existing transactions apply immediately but are sent to the CFO
-          for approval before they become permanent.
+          Each product is listed once. Open it to see every posting. Edits to
+          existing transactions apply immediately but are sent to the CFO for
+          approval before they become permanent.
         </p>
       </header>
 
@@ -351,121 +358,24 @@ export function AccountantMovement() {
         onSuccess={() => loadRecords().catch((err) => setError(err.message))}
       />
 
-      <section className="table-wrap">
-        <div className="section-head">
-          <h2>
-            {companyLabel(company, { short: true })}
-            {!isLocationless ? ` · ${location}` : ""} transactions
-          </h2>
-          <span>{records.length} records</span>
-        </div>
-        <form
-          className="list-toolbar"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const next = stockIdSearch.trim();
-            setAppliedStockId(next);
-            loadRecords(next).catch((err) => setError(err.message));
-          }}
-        >
-          <input
-            type="search"
-            placeholder="Search by stock ID (e.g. STK-000001)"
-            value={stockIdSearch}
-            onChange={(e) => setStockIdSearch(e.target.value)}
-          />
-          <button type="submit">Search</button>
-          {appliedStockId ? (
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => {
-                setStockIdSearch("");
-                setAppliedStockId("");
-                loadRecords("").catch((err) => setError(err.message));
-              }}
-            >
-              Clear
-            </button>
-          ) : null}
-        </form>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Stock ID</th>
-                <th>Date</th>
-                <th>{isLocationless ? "Item" : "Product"}</th>
-                <th>Opening</th>
-                <th>In</th>
-                <th>Out</th>
-                <th>Remark</th>
-                <th>Closing</th>
-                <th>Posted by</th>
-                <th>Status</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {records.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="hint">
-                    {appliedStockId
-                      ? "No transaction matches that stock ID."
-                      : "No transactions for this company and location yet."}
-                  </td>
-                </tr>
-              ) : (
-                records.map((row) => (
-                  <tr key={row._id} className={row.pendingApproval ? "row-pending" : undefined}>
-                    <td className="stock-id">{row.stockId || "—"}</td>
-                    <td>{row.date.slice(0, 10)}</td>
-                    <td>{row.productName}</td>
-                    <td>{fmt(row.openingBalance)}</td>
-                    <td>{fmt(row.inbound)}</td>
-                    <td>{fmt(row.outbound)}</td>
-                    <td>
-                      <RemarkTag value={row.remark} />
-                    </td>
-                    <td className="num-strong">{fmt(row.closingBalance)}</td>
-                    <td>
-                      {row.enteredBy?.role === "accountant"
-                        ? `${row.enteredBy.name} (Accountant)`
-                        : row.enteredBy?.name || "—"}
-                    </td>
-                    <td>
-                      {row.pendingApproval ? (
-                        <span className="status-pill status-pill--pending">
-                          Awaiting CFO
-                        </span>
-                      ) : (
-                        <span className="hint">Approved</span>
-                      )}
-                    </td>
-                    <td className="row-actions">
-                      <button
-                        type="button"
-                        className="text-btn"
-                        disabled={row.pendingApproval}
-                        onClick={() => edit(row)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="text-btn danger"
-                        onClick={() => remove(row._id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <GroupedTransactions
+        title={`${companyLabel(company, { short: true })}${isLocationless ? "" : ` · ${location}`} transactions`}
+        records={records}
+        downloadParams={
+          isLocationless ? { company } : { company, location }
+        }
+        loading={listLoading}
+        itemLabel={isLocationless ? "Item" : "Product"}
+        emptyMessage="No transactions for this company and location yet."
+        resetKey={`${company}:${location}`}
+        expandKey={expandKey}
+        expandSignal={expandSignal}
+        showPostedBy
+        showStatus
+        showActions
+        onEdit={edit}
+        onDelete={remove}
+      />
     </div>
   );
 }

@@ -7,12 +7,17 @@ const STAFF_ROLES = [
   { id: "clerk", label: "Data clerk" },
   { id: "trifone", label: "Trifone" },
   { id: "press", label: "Press" },
+  { id: "press_manager", label: "Press manager" },
   { id: "accountant", label: "Accountant" },
   { id: "md", label: "Managing Director" },
 ];
 
+function hasFixedAssignment(role) {
+  return ["accountant", "trifone", "press", "press_manager", "md"].includes(role);
+}
+
 function assignmentValue(item) {
-  if (item.role === "accountant" || item.role === "trifone" || item.role === "press" || item.role === "md") {
+  if (hasFixedAssignment(item.role)) {
     return "";
   }
   if (isLocationlessCompany(item.assignedCompany)) return item.assignedCompany;
@@ -24,6 +29,7 @@ function assignmentLabel(item) {
   if (item.role === "accountant") return "All locations";
   if (item.role === "trifone") return "Trifone Gadgets & Electronics";
   if (item.role === "press") return "Press raw materials";
+  if (item.role === "press_manager") return "Approves new materials · monitors Press";
   if (item.role === "md") return "All companies · monitor only";
   const value = assignmentValue(item);
   if (isLocationlessCompany(value)) return companyLabel(value);
@@ -97,6 +103,7 @@ export function CfoStaff() {
   const accountants = staff.filter((item) => item.role === "accountant");
   const trifoneStaff = staff.filter((item) => item.role === "trifone");
   const pressStaff = staff.filter((item) => item.role === "press");
+  const pressManagers = staff.filter((item) => item.role === "press_manager");
   const mdStaff = staff.filter((item) => item.role === "md");
   const assigned = clerks.filter((item) => assignmentValue(item));
   const pending = clerks.filter((item) => !assignmentValue(item));
@@ -114,6 +121,7 @@ export function CfoStaff() {
             Assign staff to Trifone Gadgets, Trifone Electronics, or an APL location after they sign up.
             Set role to <strong>Trifone</strong> for staff who manage both Trifone registers,{" "}
             <strong>Press</strong> for raw materials in/out,{" "}
+            <strong>Press manager</strong> to approve newly added raw materials and monitor Press inventory,{" "}
             <strong>Accountant</strong> for CFO department staff who can update inventory across all
             companies and locations, or <strong>Managing Director</strong> for read-only stock monitoring
             across all companies.
@@ -143,6 +151,10 @@ export function CfoStaff() {
         <article className="kpi">
           <span>Press role</span>
           <strong>{pressStaff.length}</strong>
+        </article>
+        <article className="kpi">
+          <span>Press managers</span>
+          <strong>{pressManagers.length}</strong>
         </article>
         <article className="kpi">
           <span>Managing Directors</span>
@@ -214,6 +226,8 @@ export function CfoStaff() {
                       <span className="hint">Trifone Gadgets &amp; Electronics</span>
                     ) : item.role === "press" ? (
                       <span className="hint">Press raw materials</span>
+                    ) : item.role === "press_manager" ? (
+                      <span className="hint">Approves new materials · monitors Press</span>
                     ) : item.role === "md" ? (
                       <span className="hint">All companies · monitor only</span>
                     ) : (
@@ -246,10 +260,7 @@ export function CfoStaff() {
                       : "—"}
                   </td>
                   <td>
-                    {item.role === "accountant" ||
-                    item.role === "trifone" ||
-                    item.role === "press" ||
-                    item.role === "md" ? (
+                    {hasFixedAssignment(item.role) ? (
                       <span className="ok">Active · {roleLabel(item.role)}</span>
                     ) : assignmentValue(item) ? (
                       <span className="ok">Active · {assignmentLabel(item)}</span>
@@ -278,7 +289,11 @@ export function CfoStaff() {
           </li>
           <li>
             Set role to <strong>Press</strong> for staff who update raw materials in/out for the
-            Press catalogue.
+            Press catalogue. New materials they add stay pending until a press manager approves them.
+          </li>
+          <li>
+            Set role to <strong>Press manager</strong> for the person who approves every newly added
+            raw material and can monitor all Press inventory and movements.
           </li>
           <li>
             Set role to <strong>Accountant</strong> for CFO department staff who need to update inventory

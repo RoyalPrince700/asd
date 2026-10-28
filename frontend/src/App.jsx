@@ -17,6 +17,7 @@ const CfoProducts = lazyNamed(() => import("./pages/CfoProducts.jsx"), "CfoProdu
 const CfoStaff = lazyNamed(() => import("./pages/CfoStaff.jsx"), "CfoStaff");
 const CfoAnalysis = lazyNamed(() => import("./pages/CfoAnalysis.jsx"), "CfoAnalysis");
 const CfoEditedLedger = lazyNamed(() => import("./pages/CfoEditedLedger.jsx"), "CfoEditedLedger");
+const CfoDeletionLog = lazyNamed(() => import("./pages/CfoDeletionLog.jsx"), "CfoDeletionLog");
 const CfoRequests = lazyNamed(() => import("./pages/CfoRequests.jsx"), "CfoRequests");
 const MyRequests = lazyNamed(() => import("./pages/MyRequests.jsx"), "MyRequests");
 const AdminHome = lazyNamed(() => import("./pages/AdminHome.jsx"), "AdminHome");
@@ -26,6 +27,15 @@ const TrifoneMovement = lazyNamed(() => import("./pages/TrifoneMovement.jsx"), "
 const TrifoneInventory = lazyNamed(() => import("./pages/TrifoneInventory.jsx"), "TrifoneInventory");
 const PressMovement = lazyNamed(() => import("./pages/PressMovement.jsx"), "PressMovement");
 const PressInventory = lazyNamed(() => import("./pages/PressInventory.jsx"), "PressInventory");
+const PressApprovals = lazyNamed(() => import("./pages/PressApprovals.jsx"), "PressApprovals");
+const PressManagerMovement = lazyNamed(
+  () => import("./pages/PressManagerMovement.jsx"),
+  "PressManagerMovement"
+);
+const PressDeletionLog = lazyNamed(
+  () => import("./pages/PressDeletionLog.jsx"),
+  "PressDeletionLog"
+);
 
 function lazyNamed(loader, name) {
   return lazy(() => loader().then((module) => ({ default: module[name] })));
@@ -122,8 +132,32 @@ export default function App() {
           <Route
             path="/press/inventory"
             element={
-              <ProtectedRoute role="press">
+              <ProtectedRoute roles={["press", "press_manager"]}>
                 <PressInventory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/press-manager/approvals"
+            element={
+              <ProtectedRoute role="press_manager">
+                <PressApprovals />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/press-manager/movement"
+            element={
+              <ProtectedRoute role="press_manager">
+                <PressManagerMovement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/press-manager/log"
+            element={
+              <ProtectedRoute role="press_manager">
+                <PressDeletionLog />
               </ProtectedRoute>
             }
           />
@@ -148,6 +182,14 @@ export default function App() {
             element={
               <ProtectedRoute role="cfo">
                 <CfoEditedLedger />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/deletion-log"
+            element={
+              <ProtectedRoute role="cfo">
+                <CfoDeletionLog />
               </ProtectedRoute>
             }
           />

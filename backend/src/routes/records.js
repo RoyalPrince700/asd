@@ -13,6 +13,7 @@ const { COMPANIES, isValidCompany, ACCESSIBLE_LOCATIONS, isLocationlessCompany, 
 const { isValidProductName } = require("../utils/products");
 const { getCurrentStock } = require("../utils/inventory");
 const RecordChange = require("../models/RecordChange");
+const { logRecordDeletion, rollbackDeletionLogs } = require("../utils/deletionLog");
 const {
   snapshotRecord,
   findPendingChange,
@@ -149,9 +150,13 @@ function applyRecordsListScope(filter, user, query) {
   }
 
   if (user.role === "press") {
-    if (!filter.stockId) {
-      filter.company = COMPANIES.PRESS;
-    }
+    filter.enteredBy = user._id;
+    filter.company = COMPANIES.PRESS;
+    return null;
+  }
+
+  if (user.role === "press_manager") {
+    filter.company = COMPANIES.PRESS;
     return null;
   }
 
@@ -250,7 +255,7 @@ router.get("/products", asyncHandler(async (req, res) => {
     } else {
       filter.company = { $in: TRIFONE_ROLE_COMPANIES };
     }
-  } else if (req.user.role === "press") {
+  } else if (req.user.role === "press" || req.user.role === "press_manager") {
     filter.company = COMPANIES.PRESS;
   }
 
@@ -374,6 +379,11 @@ router.post(
         `${results.created} new material${results.created === 1 ? "" : "s"} added to catalog.`
       );
     }
+    if (results.pending) {
+      parts.push(
+        `${results.pending} new material${results.pending === 1 ? "" : "s"} sent to the press manager for approval.`
+      );
+    }
     if (results.reconciled) {
       parts.push(
         `${results.reconciled} opening balance${results.reconciled === 1 ? "" : "s"} reconciled.`
@@ -475,10 +485,15 @@ router.put("/:id", requireRole("clerk", "accountant", "trifone", "press"), async
     });
   }
 
-  if (req.user.role === "press" && !isPressCompany(existing.company)) {
-    return res.status(403).json({
-      message: "You can only edit Press raw material records.",
-    });
+  if (req.user.role === "press") {
+    if (!isPressCompany(existing.company)) {
+      return res.status(403).json({
+        message: "You can only edit Press raw material records.",
+      });
+    }
+    if (String(existing.enteredBy) !== String(req.user._id)) {
+      return res.status(403).json({ message: "You can only edit your own records" });
+    }
   }
 
   const pending = await findPendingChange(existing._id);
@@ -577,13 +592,27 @@ router.delete("/:id", requireRole("clerk", "accountant", "trifone", "press", "cf
     });
   }
 
-  if (req.user.role === "press" && !isPressCompany(existing.company)) {
-    return res.status(403).json({
-      message: "You can only delete Press raw material records.",
-    });
+  if (req.user.role === "press") {
+    if (!isPressCompany(existing.company)) {
+      return res.status(403).json({
+        message: "You can only delete Press raw material records.",
+      });
+    }
+    if (String(existing.enteredBy) !== String(req.user._id)) {
+      return res.status(403).json({ message: "You can only delete your own records" });
+    }
   }
 
-  await existing.deleteOne();
+  let logs = null;
+  try {
+    logs = await logRecordDeletion(existing, req.user._id, {
+      press: req.user.role === "press",
+    });
+    await existing.deleteOne();
+  } catch (err) {
+    if (logs) await rollbackDeletionLogs(logs);
+    throw err;
+  }
 
   // Pending edits would otherwise survive as review rows the CFO can neither
   // approve nor reject, since both paths require the underlying record.

@@ -11,6 +11,7 @@ import {
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  History,
   ScrollText,
   Users,
 } from "lucide-react";
@@ -31,6 +32,7 @@ const NAV_BY_ROLE = {
     { to: "/analysis", label: "Analysis", icon: BarChart3 },
     { to: "/ledger", label: "Ledger lines", icon: ScrollText },
     { to: "/edited-ledger", label: "Edited ledger", icon: ClipboardCheck },
+    { to: "/deletion-log", label: "Deletion log", icon: History },
     { to: "/requests", label: "Request inbox", icon: Inbox },
     { to: "/my-requests", label: "My requests", icon: ClipboardList },
     { to: "/products", label: "Product catalog", icon: Package },
@@ -55,6 +57,13 @@ const NAV_BY_ROLE = {
   ],
   press: [
     { to: "/press/movement", label: "Raw materials", icon: ClipboardList },
+    { to: "/press/inventory", label: "Inventory", icon: Package },
+    MY_REQUESTS_NAV,
+  ],
+  press_manager: [
+    { to: "/press-manager/approvals", label: "Approvals", icon: ClipboardCheck },
+    { to: "/press-manager/movement", label: "All movements", icon: ScrollText },
+    { to: "/press-manager/log", label: "Deletion log", icon: History },
     { to: "/press/inventory", label: "Inventory", icon: Package },
     MY_REQUESTS_NAV,
   ],

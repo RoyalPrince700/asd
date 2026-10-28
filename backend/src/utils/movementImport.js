@@ -6,6 +6,7 @@ const { DEFAULT_TRANSACTION_REMARK } = require("../constants/transactionRemarks"
 const { computeClosingBalance } = require("./stock");
 const { buildMovementMap } = require("./inventory");
 const { nextStockIds } = require("./stockId");
+const { nameKey, queuePressMaterials } = require("./pressMaterials");
 
 const TITLE_HEADERS = [
   /^title\s*name$/i,
@@ -324,44 +325,57 @@ async function importMovementRows(rows, options) {
     skipped: 0,
     reconciled: 0,
     created: 0,
+    pending: 0,
     errors: [],
   };
 
   const pendingRecords = [];
   const catalogUpdates = new Map();
   const pendingInboundByProduct = new Map();
+  let queuedKeys = new Set();
+  let blockedKeys = new Set();
 
   if (options.pressFormat) {
-    const toCreate = [];
-    const seenCreate = new Set();
-    for (const row of rows) {
-      const key = row.titleName.trim().toLowerCase();
-      if (!key || lookup.has(key) || seenCreate.has(key)) continue;
-      if ((Number(row.recQty) || 0) <= 0) continue;
-      seenCreate.add(key);
-      toCreate.push(row.titleName.trim());
-    }
-
-    if (toCreate.length) {
-      const created = await Product.insertMany(
-        toCreate.map((name) => ({
-          name,
-          company: COMPANIES.PRESS,
-          pressData: { openingStock: 0, closingStock: 0 },
-          uploadedBy: enteredBy,
+    const queued = await queuePressMaterials(
+      rows
+        .filter((row) => (Number(row.recQty) || 0) > 0)
+        .map((row) => ({
+          name: row.titleName,
+          inbound: row.recQty,
+          outbound: 0,
         })),
-        { ordered: false }
-      );
-      results.created = created.length;
-      for (const product of created) {
-        lookup.set(product.name.trim().toLowerCase(), product.name);
-        byName.set(product.name, product);
+      {
+        submittedBy: enteredBy,
+        date,
+        remark,
+        source: "upload",
       }
-    }
+    );
+    results.pending = queued.created.length;
+    queuedKeys = new Set(queued.created.map((doc) => doc.nameKey));
+    blockedKeys = new Set(
+      queued.skipped
+        .filter((row) => /awaiting press manager/i.test(row.message))
+        .map((row) => nameKey(row.name))
+    );
   }
 
   for (const row of rows) {
-    const productName = lookup.get(row.titleName.trim().toLowerCase());
+    const rowKey = row.titleName.trim().toLowerCase();
+    if (options.pressFormat && queuedKeys.has(rowKey)) {
+      continue;
+    }
+    if (options.pressFormat && blockedKeys.has(rowKey)) {
+      results.skipped += 1;
+      results.errors.push({
+        row: row.rowNumber,
+        productName: row.titleName,
+        message: "Already awaiting press manager approval.",
+      });
+      continue;
+    }
+
+    const productName = lookup.get(rowKey);
     if (!productName) {
       results.skipped += 1;
       results.errors.push({

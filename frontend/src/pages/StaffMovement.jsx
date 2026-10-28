@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { GroupedTransactions } from "../components/GroupedTransactions.jsx";
 import { SearchableSelect } from "../components/SearchableSelect.jsx";
-import { RemarkTag } from "../components/RemarkTag.jsx";
 import { MovementUpload } from "../components/MovementUpload.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
@@ -11,6 +11,7 @@ import {
   TRANSACTION_REMARKS,
 } from "../constants/transactionRemarks.js";
 import { staffAssignmentLabel, staffCompany } from "../utils/staff.js";
+import { materialKey } from "../utils/transactionGroups.js";
 
 const emptyForm = {
   productName: "",
@@ -42,14 +43,14 @@ export function StaffMovement() {
   const [form, setForm] = useState(emptyForm);
   const [products, setProducts] = useState([]);
   const [records, setRecords] = useState([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [expandKey, setExpandKey] = useState("");
+  const [expandSignal, setExpandSignal] = useState(0);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [stockIdSearch, setStockIdSearch] = useState("");
-  const [appliedStockId, setAppliedStockId] = useState("");
-
   const closing = useMemo(
     () => openingBalance + n(form.inbound) - n(form.outbound),
     [openingBalance, form.inbound, form.outbound]
@@ -63,11 +64,14 @@ export function StaffMovement() {
     return names;
   }, [products, form.productName]);
 
-  async function loadRecords(nextStockId = appliedStockId) {
-    const params = {};
-    if (nextStockId) params.stockId = nextStockId;
-    const data = await api.records(params);
-    setRecords(data.records);
+  async function loadRecords() {
+    setListLoading(true);
+    try {
+      const data = await api.records();
+      setRecords(data.records || []);
+    } finally {
+      setListLoading(false);
+    }
   }
 
   async function loadProducts() {
@@ -138,10 +142,11 @@ export function StaffMovement() {
         setNotice(successMessage);
       }
 
+      const postedKey = materialKey(form.productName);
       resetForm();
-      setStockIdSearch("");
-      setAppliedStockId("");
-      await loadRecords("");
+      setExpandKey(postedKey);
+      setExpandSignal((value) => value + 1);
+      await loadRecords();
       toast({
         message: successMessage,
         type: "success",
@@ -201,8 +206,9 @@ export function StaffMovement() {
         </div>
         <p className="lede tight">
           Select a {isLocationlessStaff ? "item" : "book"}, enter In or Out, then post
-          the transaction. Edits to existing transactions apply immediately for you
-          but are sent to the CFO for approval before they become permanent.
+          the transaction. Each product is listed once. Open it to see every posting.
+          Edits to existing transactions apply immediately for you but are sent to
+          the CFO for approval before they become permanent.
         </p>
       </header>
 
@@ -313,112 +319,20 @@ export function StaffMovement() {
         onSuccess={() => loadRecords().catch((err) => setError(err.message))}
       />
 
-      <section className="table-wrap">
-        <div className="section-head">
-          <h2>Your transactions</h2>
-          <span>{records.length} records</span>
-        </div>
-        <form
-          className="list-toolbar"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const next = stockIdSearch.trim();
-            setAppliedStockId(next);
-            loadRecords(next).catch((err) => setError(err.message));
-          }}
-        >
-          <input
-            type="search"
-            placeholder="Search by stock ID (e.g. STK-000001)"
-            value={stockIdSearch}
-            onChange={(e) => setStockIdSearch(e.target.value)}
-          />
-          <button type="submit">Search</button>
-          {appliedStockId ? (
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => {
-                setStockIdSearch("");
-                setAppliedStockId("");
-                loadRecords("").catch((err) => setError(err.message));
-              }}
-            >
-              Clear
-            </button>
-          ) : null}
-        </form>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Stock ID</th>
-                <th>Date</th>
-                <th>{isLocationlessStaff ? "Item" : "Product"}</th>
-                <th>Opening</th>
-                <th>In</th>
-                <th>Out</th>
-                <th>Remark</th>
-                <th>Closing</th>
-                <th>Status</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {records.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="hint">
-                    {appliedStockId
-                      ? "No transaction matches that stock ID."
-                      : "No transactions yet. Post your first In or Out above."}
-                  </td>
-                </tr>
-              ) : (
-                records.map((row) => (
-                  <tr key={row._id} className={row.pendingApproval ? "row-pending" : undefined}>
-                    <td className="stock-id">{row.stockId || "—"}</td>
-                    <td>{row.date.slice(0, 10)}</td>
-                    <td>{row.productName}</td>
-                    <td>{fmt(row.openingBalance)}</td>
-                    <td>{fmt(row.inbound)}</td>
-                    <td>{fmt(row.outbound)}</td>
-                    <td>
-                      <RemarkTag value={row.remark} />
-                    </td>
-                    <td className="num-strong">{fmt(row.closingBalance)}</td>
-                    <td>
-                      {row.pendingApproval ? (
-                        <span className="status-pill status-pill--pending">
-                          Awaiting CFO
-                        </span>
-                      ) : (
-                        <span className="hint">Approved</span>
-                      )}
-                    </td>
-                    <td className="row-actions">
-                      <button
-                        type="button"
-                        className="text-btn"
-                        disabled={row.pendingApproval}
-                        onClick={() => edit(row)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="text-btn danger"
-                        onClick={() => remove(row._id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <GroupedTransactions
+        title="Your transactions"
+        records={records}
+        downloadParams={{}}
+        loading={listLoading}
+        itemLabel={isLocationlessStaff ? "Item" : "Product"}
+        emptyMessage="No transactions yet. Post your first In or Out above."
+        expandKey={expandKey}
+        expandSignal={expandSignal}
+        showStatus
+        showActions
+        onEdit={edit}
+        onDelete={remove}
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ export function homeForRole(role) {
   if (role === "accountant") return "/accountant/movement";
   if (role === "trifone") return "/trifone/movement";
   if (role === "press") return "/press/movement";
+  if (role === "press_manager") return "/press-manager/approvals";
   return "/entry";
 }
 
@@ -14,6 +15,7 @@ export function roleLabel(role) {
   if (role === "accountant") return "Accountant";
   if (role === "trifone") return "Trifone";
   if (role === "press") return "Press";
+  if (role === "press_manager") return "Press manager";
   return "Data clerk";
 }
 
@@ -22,5 +24,6 @@ export function enteredByLabel(user) {
   if (user.role === "accountant") return `${user.name} (Accountant)`;
   if (user.role === "trifone") return `${user.name} (Trifone)`;
   if (user.role === "press") return `${user.name} (Press)`;
+  if (user.role === "press_manager") return `${user.name} (Press manager)`;
   return user.name;
 }

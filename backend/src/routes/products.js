@@ -5,6 +5,8 @@ const Product = require("../models/Product");
 const CatalogConfig = require("../models/CatalogConfig");
 const StockRecord = require("../models/StockRecord");
 const RecordChange = require("../models/RecordChange");
+const DeletionLog = require("../models/DeletionLog");
+const { logRecordDeletions } = require("../utils/deletionLog");
 const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const {
@@ -205,7 +207,7 @@ function catalogOpeningFromRow(row) {
   return 0;
 }
 
-router.get("/my-inventory", requireRole("clerk", "accountant", "trifone", "press"), asyncHandler(async (req, res) => {
+router.get("/my-inventory", requireRole("clerk", "accountant", "trifone", "press", "press_manager"), asyncHandler(async (req, res) => {
   let company;
   let location;
 
@@ -232,7 +234,7 @@ router.get("/my-inventory", requireRole("clerk", "accountant", "trifone", "press
       });
     }
     location = null;
-  } else if (req.user.role === "press") {
+  } else if (req.user.role === "press" || req.user.role === "press_manager") {
     company = COMPANIES.PRESS;
     location = null;
   } else {
@@ -578,9 +580,16 @@ router.post(
 
     const label = COMPANY_LABELS[company];
 
-    const recordIds = await StockRecord.find({ company }).distinct("_id");
-    const deletedRecords = await StockRecord.deleteMany({ company });
-    if (recordIds.length) {
+    const records = await StockRecord.find({ company }).lean();
+    const recordIds = records.map((record) => record._id);
+    if (records.length) {
+      try {
+        await logRecordDeletions(records, req.user._id);
+        await StockRecord.deleteMany({ company });
+      } catch (err) {
+        await DeletionLog.deleteMany({ recordId: { $in: recordIds } });
+        throw err;
+      }
       await RecordChange.deleteMany({ recordId: { $in: recordIds } });
     }
 
@@ -619,7 +628,7 @@ router.post(
     res.json({
       message: `Reset ${label}: all in/out movements cleared and stock balances set to zero. Product names were kept.`,
       company,
-      recordsDeleted: deletedRecords.deletedCount || 0,
+      recordsDeleted: records.length,
       productsReset: productsResult.modifiedCount || 0,
     });
   })

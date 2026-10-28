@@ -12,7 +12,11 @@ const staffRoutes = require("./routes/staff");
 const reportRoutes = require("./routes/reports");
 const analysisRoutes = require("./routes/analysis");
 const requestRoutes = require("./routes/requests");
+const pressMaterialRoutes = require("./routes/pressMaterials");
+const pressDeletionRoutes = require("./routes/pressDeletions");
+const deletionLogRoutes = require("./routes/deletionLogs");
 const { bootstrapAdmin, bootstrapProducts } = require("./utils/seed");
+const { backfillPressDeletionLogs } = require("./utils/deletionLog");
 const { backfillStockIds } = require("./utils/stockId");
 const { backfillRequestIds } = require("./utils/requestId");
 
@@ -46,6 +50,9 @@ app.use("/api/staff", staffRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/analysis", analysisRoutes);
 app.use("/api/requests", requestRoutes);
+app.use("/api/press-materials", pressMaterialRoutes);
+app.use("/api/press-deletions", pressDeletionRoutes);
+app.use("/api/deletion-logs", deletionLogRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
@@ -69,6 +76,14 @@ connectDb()
     const requestIds = await backfillRequestIds();
     if (requestIds.assigned) {
       console.log(`Assigned request IDs to ${requestIds.assigned} existing requests`);
+    }
+    try {
+      const deletionLogs = await backfillPressDeletionLogs();
+      if (deletionLogs.copied) {
+        console.log(`Copied ${deletionLogs.copied} press deletions into the deletion log`);
+      }
+    } catch (err) {
+      console.error("Deletion log backfill failed", err);
     }
     const onListen = () => {
       console.log(`API listening on port ${port}`);

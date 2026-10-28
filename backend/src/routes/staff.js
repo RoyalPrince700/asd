@@ -6,8 +6,9 @@ const { COMPANIES, ACCESSIBLE_LOCATIONS, isLocationlessCompany } = require("../c
 
 const router = express.Router();
 
-const MANAGEABLE_ROLES = ["clerk", "accountant", "trifone", "press", "md"];
-const ASSIGNABLE_ROLES = ["clerk", "accountant", "trifone", "press", "md"];
+const MANAGEABLE_ROLES = ["clerk", "accountant", "trifone", "press", "press_manager", "md"];
+const ASSIGNABLE_ROLES = ["clerk", "accountant", "trifone", "press", "press_manager", "md"];
+const FIXED_ASSIGNMENT_ROLES = ["accountant", "trifone", "press", "press_manager", "md"];
 
 console.log("[staff] route loaded", {
   isLocationlessCompany: typeof isLocationlessCompany,
@@ -100,7 +101,7 @@ router.patch(
     if (!MANAGEABLE_ROLES.includes(user.role)) {
       console.warn("[staff PATCH] invalid role to manage", user.role);
       return res.status(400).json({
-        message: "Only clerk, accountant, trifone, press, or MD accounts can be managed here.",
+        message: "Only clerk, accountant, trifone, press, press manager, or MD accounts can be managed here.",
       });
     }
 
@@ -109,22 +110,17 @@ router.patch(
     if (role !== undefined) {
       if (!ASSIGNABLE_ROLES.includes(role)) {
         return res.status(400).json({
-          message: "Role must be clerk, accountant, trifone, press, or md.",
+          message: "Role must be clerk, accountant, trifone, press, press manager, or md.",
         });
       }
       user.role = role;
-      if (role === "accountant" || role === "trifone" || role === "press" || role === "md") {
+      if (FIXED_ASSIGNMENT_ROLES.includes(role)) {
         user.assignedCompany = null;
         user.location = undefined;
       }
     }
 
-    if (
-      user.role === "accountant" ||
-      user.role === "trifone" ||
-      user.role === "press" ||
-      user.role === "md"
-    ) {
+    if (FIXED_ASSIGNMENT_ROLES.includes(user.role)) {
       await user.save();
       console.log(`[staff PATCH] saved ${user.role}`, publicStaff(user));
       return res.json({ staff: publicStaff(user) });

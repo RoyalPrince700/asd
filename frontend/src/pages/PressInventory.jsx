@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const PAGE_SIZE = 50;
 const LOW_STOCK_THRESHOLD = 10;
@@ -15,6 +16,8 @@ function isLowStock(value) {
 }
 
 export function PressInventory() {
+  const { user } = useAuth();
+  const isManager = user?.role === "press_manager";
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -66,8 +69,9 @@ export function PressInventory() {
           <h1>Raw materials inventory</h1>
         </div>
         <p className="lede tight">
-          View live stock for Press raw materials. To update balances, post In or
-          Out on the Raw materials movement page.
+          {isManager
+            ? "Live stock for every Press raw material, including movements posted by all Press staff."
+            : "View live stock for Press raw materials. To update balances, post In or Out on the Raw materials movement page."}
         </p>
       </header>
 

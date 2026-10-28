@@ -1,20 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Trash2 } from "lucide-react";
 import { api } from "../api";
+import { GroupedTransactions } from "../components/GroupedTransactions.jsx";
 import { CfoRemarkTag } from "../components/RemarkTag.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { COMPANY_OPTIONS, ACCESSIBLE_LOCATIONS, companyLabel, isLocationlessCompany } from "../constants/companies";
-import { enteredByLabel, roleLabel } from "../utils/role.js";
-import { useDialog } from "../context/DialogContext.jsx";
-
-const PAGE_SIZE = 50;
-
-function fmt(value) {
-  return Number(value || 0).toLocaleString("en-US", {
-    maximumFractionDigits: 2,
-  });
-}
+import { roleLabel } from "../utils/role.js";
 
 function filtersFromSearch(searchParams) {
   return {
@@ -30,37 +21,31 @@ function filtersFromSearch(searchParams) {
 export function CfoLedger() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const { confirm, toast } = useDialog();
   const initialFilters = filtersFromSearch(searchParams);
   const [filters, setFilters] = useState(initialFilters);
   const [applied, setApplied] = useState(initialFilters);
   const [records, setRecords] = useState([]);
   const [products, setProducts] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState("");
-  const [deletingId, setDeletingId] = useState(null);
 
   const filteredProducts = useMemo(() => {
     if (!filters.company) return products;
     return products.filter((product) => product.company === filters.company);
   }, [products, filters.company]);
 
-  async function loadList(nextPage = page, params = applied) {
+  async function loadList(params = applied) {
     setLoading(true);
     setError("");
     try {
+      const requestParams = { ...params };
+      delete requestParams.stockId;
       const [rec, prod] = await Promise.all([
-        api.records({ ...params, page: nextPage, limit: PAGE_SIZE }),
+        api.records(requestParams),
         api.products(),
       ]);
-      setRecords(rec.records);
-      setTotal(rec.total ?? rec.records.length);
-      setPage(rec.page ?? nextPage);
-      setTotalPages(rec.totalPages ?? 1);
+      setRecords(rec.records || []);
       setProducts(prod.products);
     } catch (err) {
       setError(err.message);
@@ -70,13 +55,13 @@ export function CfoLedger() {
   }
 
   useEffect(() => {
-    loadList(1).catch((err) => setError(err.message));
+    loadList().catch((err) => setError(err.message));
   }, []);
 
   function applyFilters(e) {
     e.preventDefault();
     setApplied(filters);
-    loadList(1, filters).catch((err) => setError(err.message));
+    loadList(filters).catch((err) => setError(err.message));
   }
 
   async function download(type) {
@@ -91,33 +76,6 @@ export function CfoLedger() {
     }
   }
 
-  async function remove(row) {
-    const label = row.stockId ? `${row.stockId} (${row.productName})` : row.productName;
-    const ok = await confirm({
-      title: "Delete ledger line",
-      message: `Permanently delete ${label} posted by ${enteredByLabel(row.enteredBy)}? This cannot be undone. Inventory totals re-adjust automatically, but the opening and closing figures already saved on other lines stay as they are.`,
-      confirmLabel: "Delete line",
-      variant: "danger",
-    });
-    if (!ok) return;
-
-    setDeletingId(row._id);
-    setError("");
-    try {
-      await api.deleteRecord(row._id);
-      const nextPage = records.length === 1 && page > 1 ? page - 1 : page;
-      await loadList(nextPage, applied);
-      toast({ message: "Ledger line deleted.", type: "success" });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  const start = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const end = Math.min(page * PAGE_SIZE, total);
-
   return (
     <div className="page">
       <header className="page-head split">
@@ -125,8 +83,9 @@ export function CfoLedger() {
           <p className="eyebrow">{roleLabel(user?.role)}</p>
           <h1>Ledger lines</h1>
           <p className="lede tight">
-            Live feed of clerk postings. Filter by stock ID, company, product, location, or date range,
-            then export the full listing.
+            Live feed of clerk postings. Each product is listed once for its company
+            and location. Open it to see every posting. Filter by stock ID, company,
+            product, location, or date range, then export the full listing.
           </p>
         </div>
         <div className="export-row">
@@ -236,104 +195,24 @@ export function CfoLedger() {
 
       {error ? <p className="alert">{error}</p> : null}
 
-      <section className="table-wrap">
-        <div className="section-head">
-          <h2>All ledger lines</h2>
-          <span>{total.toLocaleString()} records</span>
-        </div>
-
-        {loading ? (
-          <p className="hint empty-hint">Loading ledger lines…</p>
-        ) : records.length ? (
+      <GroupedTransactions
+        title="All ledger lines"
+        records={records}
+        loading={loading}
+        itemLabel="Product"
+        emptyMessage={
           <>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Stock ID</th>
-                    <th>Date</th>
-                    <th>Company</th>
-                    <th>Location</th>
-                    <th>Product</th>
-                    <th>Opening</th>
-                    <th>In</th>
-                    <th>Out</th>
-                    <th>Remark</th>
-                    <th>Closing</th>
-                    <th>Posted by</th>
-                    {/* Delete column disabled. Uncomment with the matching cell below to re-enable. */}
-                    {/* <th aria-label="Actions" /> */}
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.map((row) => (
-                    <tr key={row._id}>
-                      <td className="stock-id">{row.stockId || "—"}</td>
-                      <td>{row.date.slice(0, 10)}</td>
-                      <td>{companyLabel(row.company, { short: true })}</td>
-                      <td>{row.location || "—"}</td>
-                      <td>{row.productName}</td>
-                      <td>{fmt(row.openingBalance)}</td>
-                      <td>{fmt(row.inbound)}</td>
-                      <td>{fmt(row.outbound)}</td>
-                      <td>
-                        <CfoRemarkTag value={row.remark} />
-                      </td>
-                      <td className="num-strong">{fmt(row.closingBalance)}</td>
-                      <td>{enteredByLabel(row.enteredBy)}</td>
-                      {/* Delete action disabled. Uncomment with the matching header above to re-enable. */}
-                      {/* <td className="row-actions">
-                        <button
-                          type="button"
-                          className="icon-btn danger"
-                          title={`Delete ${row.stockId || row.productName}`}
-                          aria-label={`Delete ${row.stockId || row.productName}`}
-                          disabled={deletingId === row._id}
-                          onClick={() => remove(row)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td> */}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="pagination">
-              <span>
-                Showing {start}–{end} of {total.toLocaleString()}
-              </span>
-              <div className="pagination-actions">
-                <button
-                  type="button"
-                  className="ghost"
-                  disabled={page <= 1 || loading}
-                  onClick={() => loadList(page - 1, applied)}
-                >
-                  Previous
-                </button>
-                <span>
-                  Page {page} of {totalPages}
-                </span>
-                <button
-                  type="button"
-                  className="ghost"
-                  disabled={page >= totalPages || loading}
-                  onClick={() => loadList(page + 1, applied)}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <p className="hint empty-hint">
             No ledger lines match the current filters.{" "}
             <Link to="/overview">Return to overview</Link>
-          </p>
-        )}
-      </section>
+          </>
+        }
+        resetKey={JSON.stringify(applied)}
+        initialQuery={applied.stockId}
+        showPostedBy
+        showCompany
+        Remark={CfoRemarkTag}
+        decimals={2}
+      />
     </div>
   );
 }

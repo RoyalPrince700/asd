@@ -732,6 +732,23 @@ th {
   background: #fff;
 }
 
+.txn-download {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.txn-download label {
+  min-width: 160px;
+}
+
+.txn-download .alert {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .list-toolbar {
   display: flex;
   gap: 10px;
@@ -1686,6 +1703,55 @@ input[readonly] {
   vertical-align: top;
 }
 
+.txn-group {
+  cursor: pointer;
+  background: #f6f1e8;
+}
+
+.txn-group:hover {
+  background: #efe7d8;
+}
+
+.txn-group:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+
+.txn-chevron {
+  display: inline-flex;
+  color: var(--navy);
+}
+
+.txn-material-cell {
+  white-space: normal;
+  min-width: 200px;
+}
+
+.txn-material {
+  display: block;
+  font-weight: 600;
+}
+
+.txn-meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.txn-child td {
+  background: #fffdf9;
+}
+
+.txn-child.row-pending td {
+  background: #fffbf5;
+}
+
+.txn-child td:first-child {
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+
 .row-pending {
   background: #fffbf5;
 }
@@ -1738,6 +1804,11 @@ input[readonly] {
 .status-pill--done {
   background: #e7f5ef;
   color: var(--up);
+}
+
+.status-pill--rejected {
+  background: #fde8e6;
+  color: var(--danger);
 }
 
 .remark-tag {
