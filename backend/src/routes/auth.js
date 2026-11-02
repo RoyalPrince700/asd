@@ -87,4 +87,31 @@ router.get("/me", protect, (req, res) => {
   res.json({ user: publicUser(req.user) });
 });
 
+router.patch("/password", protect, asyncHandler(async (req, res) => {
+  const currentPassword = String(req.body.currentPassword || "");
+  const newPassword = String(req.body.newPassword || "");
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: "Current password and new password are required" });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ message: "Password must be at least 6 characters" });
+  }
+
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    return res.status(401).json({ message: "User not found" });
+  }
+
+  const ok = await bcrypt.compare(currentPassword, user.password);
+  if (!ok) {
+    return res.status(400).json({ message: "Current password is incorrect" });
+  }
+
+  user.password = await bcrypt.hash(newPassword, 10);
+  await user.save();
+  res.json({ ok: true });
+}));
+
 module.exports = router;

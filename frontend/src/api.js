@@ -141,6 +141,11 @@ export const api = {
       body: JSON.stringify({ name, email, password }),
     }),
   me: () => request("/api/auth/me"),
+  changePassword: (currentPassword, newPassword) =>
+    request("/api/auth/password", {
+      method: "PATCH",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   staff: () => request("/api/staff"),
   updateStaff: (id, payload) =>
     request(`/api/staff/${id}`, {

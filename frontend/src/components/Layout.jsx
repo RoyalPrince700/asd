@@ -13,6 +13,7 @@ import {
   PanelLeftOpen,
   History,
   ScrollText,
+  Settings,
   Users,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -21,6 +22,7 @@ import { isAssignedStaff } from "../utils/staff.js";
 import { companyLabel, isLocationlessCompany } from "../constants/companies";
 
 const MY_REQUESTS_NAV = { to: "/my-requests", label: "Requests", icon: Inbox };
+const SETTINGS_NAV = { to: "/settings", label: "Settings", icon: Settings };
 
 const NAV_BY_ROLE = {
   admin: [
@@ -92,10 +94,11 @@ export function Layout() {
   };
 
   const navItems = useMemo(() => {
-    if (user.role === "clerk" && isAssignedStaff(user)) {
-      return ASSIGNED_CLERK_NAV;
-    }
-    return NAV_BY_ROLE[user.role] ?? NAV_BY_ROLE.clerk;
+    const items =
+      user.role === "clerk" && isAssignedStaff(user)
+        ? ASSIGNED_CLERK_NAV
+        : (NAV_BY_ROLE[user.role] ?? NAV_BY_ROLE.clerk);
+    return [...items, SETTINGS_NAV];
   }, [user]);
 
   return (

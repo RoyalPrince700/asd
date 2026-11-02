@@ -1,4 +1,5 @@
 const express = require("express");
+const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
@@ -84,7 +85,10 @@ router.patch(
   asyncHandler(async (req, res) => {
     console.log("[staff PATCH] incoming", {
       paramsId: req.params.id,
-      body: req.body,
+      body: {
+        ...req.body,
+        password: req.body?.password ? "[redacted]" : undefined,
+      },
       actor: {
         id: String(req.user?._id || ""),
         email: req.user?.email,
@@ -105,7 +109,15 @@ router.patch(
       });
     }
 
-    const { assignment, location, assignedCompany, role } = req.body;
+    const { assignment, location, assignedCompany, role, password } = req.body;
+
+    if (password !== undefined) {
+      const next = String(password);
+      if (next.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      user.password = await bcrypt.hash(next, 10);
+    }
 
     if (role !== undefined) {
       if (!ASSIGNABLE_ROLES.includes(role)) {
@@ -141,8 +153,8 @@ router.patch(
             message: "Provide a Trifone Gadgets, Trifone Electronics, or APL location assignment.",
           });
         }
-      } else if (role === undefined) {
-        return res.status(400).json({ message: "Assignment or role is required." });
+      } else if (role === undefined && password === undefined) {
+        return res.status(400).json({ message: "Assignment, role, or password is required." });
       }
     } catch (err) {
       console.error("[staff PATCH] assignment rejected", {

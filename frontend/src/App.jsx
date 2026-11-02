@@ -21,6 +21,7 @@ const CfoDeletionLog = lazyNamed(() => import("./pages/CfoDeletionLog.jsx"), "Cf
 const CfoRequests = lazyNamed(() => import("./pages/CfoRequests.jsx"), "CfoRequests");
 const MyRequests = lazyNamed(() => import("./pages/MyRequests.jsx"), "MyRequests");
 const AdminHome = lazyNamed(() => import("./pages/AdminHome.jsx"), "AdminHome");
+const Settings = lazyNamed(() => import("./pages/Settings.jsx"), "Settings");
 const AccountantMovement = lazyNamed(() => import("./pages/AccountantMovement.jsx"), "AccountantMovement");
 const AccountantInventory = lazyNamed(() => import("./pages/AccountantInventory.jsx"), "AccountantInventory");
 const TrifoneMovement = lazyNamed(() => import("./pages/TrifoneMovement.jsx"), "TrifoneMovement");
@@ -237,6 +238,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

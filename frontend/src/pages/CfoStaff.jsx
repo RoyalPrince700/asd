@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { ACCESSIBLE_LOCATIONS, companyLabel, isLocationlessCompany } from "../constants/companies";
 import { roleLabel } from "../utils/role.js";
+import { useDialog } from "../context/DialogContext.jsx";
+import { SetPasswordForm } from "../components/SetPasswordForm.jsx";
 
 const STAFF_ROLES = [
   { id: "clerk", label: "Data clerk" },
@@ -38,6 +40,7 @@ function assignmentLabel(item) {
 }
 
 export function CfoStaff() {
+  const { toast } = useDialog();
   const [staff, setStaff] = useState([]);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
@@ -92,6 +95,17 @@ export function CfoStaff() {
   function updateRole(id, role) {
     console.log("[CfoStaff] role change", { id, role });
     updateStaffMember(id, { role });
+  }
+
+  async function updatePassword(id, password) {
+    setBusyId(id);
+    setError("");
+    try {
+      await api.updateStaff(id, { password });
+      toast({ message: "Password updated.", type: "success" });
+    } finally {
+      setBusyId("");
+    }
   }
 
   function updateAssignment(id, assignment) {
@@ -191,13 +205,14 @@ export function CfoStaff() {
               <th>Role</th>
               <th>Assignment</th>
               <th>Joined</th>
+              <th>Password</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {staff.length === 0 ? (
               <tr>
-                <td colSpan={6} className="hint">
+                <td colSpan={7} className="hint">
                   No staff accounts yet. Clerks appear here after they sign up.
                 </td>
               </tr>
@@ -258,6 +273,12 @@ export function CfoStaff() {
                     {item.createdAt
                       ? new Date(item.createdAt).toLocaleDateString()
                       : "—"}
+                  </td>
+                  <td>
+                    <SetPasswordForm
+                      busy={busyId === item.id}
+                      onSave={(password) => updatePassword(item.id, password)}
+                    />
                   </td>
                   <td>
                     {hasFixedAssignment(item.role) ? (

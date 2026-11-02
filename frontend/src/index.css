@@ -678,6 +678,37 @@ th {
   color: var(--up);
 }
 
+.settings-form,
+.inline-password {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-form {
+  max-width: 420px;
+  margin-top: 16px;
+}
+
+.inline-password {
+  gap: 8px;
+  min-width: 200px;
+}
+
+.inline-password .actions,
+.settings-form .actions {
+  margin-top: 0;
+}
+
+.inline-password .alert {
+  margin: 0;
+  font-size: 12px;
+}
+
+td:has(.inline-password) {
+  white-space: normal;
+  vertical-align: top;
+}
+
 .login-aside {
   background: var(--navy);
   color: #e8e0d2;

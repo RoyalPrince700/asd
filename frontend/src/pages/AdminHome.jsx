@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useDialog } from "../context/DialogContext.jsx";
 import { api } from "../api";
 import { roleLabel } from "../utils/role.js";
+import { SetPasswordForm } from "../components/SetPasswordForm.jsx";
 
 const ROLES = ["clerk", "accountant", "cfo", "md", "admin"];
 
@@ -40,6 +41,17 @@ export function AdminHome() {
     }
   }
 
+  async function updatePassword(id, password) {
+    setBusyId(id);
+    setError("");
+    try {
+      await api.updateUser(id, { password });
+      toast({ message: "Password updated.", type: "success" });
+    } finally {
+      setBusyId("");
+    }
+  }
+
   async function removeUser(id) {
     const ok = await confirm({
       title: "Delete user",
@@ -69,7 +81,7 @@ export function AdminHome() {
           <p className="eyebrow">Administration</p>
           <h1>User management</h1>
           <p className="lede tight">
-            Assign clerk, CFO, Managing Director, or admin roles. You are signed in as {user.name}.
+            Assign clerk, CFO, Managing Director, or admin roles, and set a new password when someone is locked out. You are signed in as {user.name}.
           </p>
         </div>
       </header>
@@ -84,6 +96,7 @@ export function AdminHome() {
               <th>Email</th>
               <th>Role</th>
               <th>Joined</th>
+              <th>Password</th>
               <th />
             </tr>
           </thead>
@@ -114,6 +127,12 @@ export function AdminHome() {
                     {item.createdAt
                       ? new Date(item.createdAt).toLocaleDateString()
                       : "—"}
+                  </td>
+                  <td>
+                    <SetPasswordForm
+                      busy={busyId === item.id}
+                      onSave={(password) => updatePassword(item.id, password)}
+                    />
                   </td>
                   <td>
                     {isSelf ? (

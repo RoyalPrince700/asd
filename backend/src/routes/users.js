@@ -36,7 +36,7 @@ router.patch(
       return res.status(404).json({ message: "User not found" });
     }
 
-    const { name, email, role } = req.body;
+    const { name, email, role, password } = req.body;
 
     if (name !== undefined) {
       const trimmed = String(name).trim();
@@ -68,6 +68,14 @@ router.patch(
         user.assignedCompany = null;
         user.location = undefined;
       }
+    }
+
+    if (password !== undefined) {
+      const next = String(password);
+      if (next.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      user.password = await bcrypt.hash(next, 10);
     }
 
     await user.save();
