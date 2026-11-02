@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { AccountantPressBooks } from "./PressBooks.jsx";
 import {
   ACCESSIBLE_LOCATIONS,
   COMPANY_OPTIONS,
@@ -206,6 +207,13 @@ export function AccountantInventory() {
           </p>
         )}
       </section>
+
+      {company === "press" ? (
+        <>
+          <AccountantPressBooks category="wip" />
+          <AccountantPressBooks category="finished" />
+        </>
+      ) : null}
     </div>
   );
 }

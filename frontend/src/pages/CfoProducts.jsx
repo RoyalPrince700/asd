@@ -358,6 +358,7 @@ export function CfoProducts() {
   const pressColumns = pressFields.length
     ? pressFields
     : [
+        { key: "costPrice", label: "Cost Price", type: "money" },
         { key: "openingStock", label: "Opening Stock", type: "count" },
         { key: "closingStock", label: "Closing Stock", type: "count" },
       ];
@@ -682,7 +683,11 @@ export function CfoProducts() {
                                       className={low ? "low-stock-glow" : undefined}
                                       title={low ? "Low stock — below 10" : undefined}
                                     >
-                                      {formatCellValue(value)}
+                                      {field.type === "money"
+                                        ? value
+                                          ? `₦${formatSalePrice(value)}`
+                                          : "—"
+                                        : formatCellValue(value)}
                                     </span>
                                   </td>
                                 );

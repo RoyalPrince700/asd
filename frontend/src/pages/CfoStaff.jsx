@@ -30,7 +30,7 @@ function assignmentValue(item) {
 function assignmentLabel(item) {
   if (item.role === "accountant") return "All locations";
   if (item.role === "trifone") return "Trifone Gadgets & Electronics";
-  if (item.role === "press") return "Press raw materials";
+  if (item.role === "press") return "Raw materials, work in progress, finished books";
   if (item.role === "press_manager") return "Approves new materials · monitors Press";
   if (item.role === "md") return "All companies · monitor only";
   const value = assignmentValue(item);
@@ -134,10 +134,9 @@ export function CfoStaff() {
           <p className="lede tight">
             Assign staff to Trifone Gadgets, Trifone Electronics, or an APL location after they sign up.
             Set role to <strong>Trifone</strong> for staff who manage both Trifone registers,{" "}
-            <strong>Press</strong> for raw materials in/out,{" "}
+            <strong>Press</strong> for raw materials, work in progress, and finished books,{" "}
             <strong>Press manager</strong> to approve newly added raw materials and monitor Press inventory,{" "}
-            <strong>Accountant</strong> for CFO department staff who can update inventory across all
-            companies and locations, or <strong>Managing Director</strong> for read-only stock monitoring
+            <strong>Accountant</strong> for CFO department staff who update inventory and monitor Press work in progress and finished books, or <strong>Managing Director</strong> for read-only stock monitoring
             across all companies.
           </p>
         </div>
@@ -240,7 +239,7 @@ export function CfoStaff() {
                     ) : item.role === "trifone" ? (
                       <span className="hint">Trifone Gadgets &amp; Electronics</span>
                     ) : item.role === "press" ? (
-                      <span className="hint">Press raw materials</span>
+                      <span className="hint">Raw materials, work in progress, finished books</span>
                     ) : item.role === "press_manager" ? (
                       <span className="hint">Approves new materials · monitors Press</span>
                     ) : item.role === "md" ? (
@@ -309,16 +308,18 @@ export function CfoStaff() {
             Electronics (stock movement and inventory for those registers only).
           </li>
           <li>
-            Set role to <strong>Press</strong> for staff who update raw materials in/out for the
-            Press catalogue. New materials they add stay pending until a press manager approves them.
+            Set role to <strong>Press</strong> for staff who update raw materials in/out and who
+            record work in progress and finished books (title, quantity, and cost per unit). New raw
+            materials they add stay pending until a press manager approves them.
           </li>
           <li>
             Set role to <strong>Press manager</strong> for the person who approves every newly added
             raw material and can monitor all Press inventory and movements.
           </li>
           <li>
-            Set role to <strong>Accountant</strong> for CFO department staff who need to update inventory
-            on behalf of all clerks across any company and location.
+            Set role to <strong>Accountant</strong> for CFO department staff who update inventory
+            across companies and locations, and who monitor Press work in progress and finished books.
+            Those lists can be downloaded as Word or Excel from the accountant pages.
           </li>
           <li>
             Set role to <strong>Managing Director</strong> for read-only access to stock overview,

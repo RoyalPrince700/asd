@@ -26,6 +26,7 @@ const {
   parsePressMovementExcel,
   importMovementRows,
 } = require("../utils/movementImport");
+const { syncPressMaterialCost } = require("../utils/pressMaterials");
 
 const router = express.Router();
 
@@ -458,6 +459,10 @@ router.post("/", requireRole("clerk", "accountant", "trifone", "press"), asyncHa
     enteredBy: req.user._id,
   });
 
+  if (data.company === COMPANIES.PRESS) {
+    await syncPressMaterialCost(record.productName);
+  }
+
   const populated = await record.populate("enteredBy", "name email role");
   res.status(201).json({ record: populated });
 }));
@@ -550,9 +555,17 @@ router.put("/:id", requireRole("clerk", "accountant", "trifone", "press"), async
   }
 
   const originalSnapshot = snapshotRecord(existing);
+  const previousName = existing.productName;
 
   Object.assign(existing, data);
   await existing.save();
+
+  if (existing.company === COMPANIES.PRESS || data.company === COMPANIES.PRESS) {
+    await syncPressMaterialCost(existing.productName);
+    if (previousName && previousName !== existing.productName) {
+      await syncPressMaterialCost(previousName);
+    }
+  }
 
   const change = await RecordChange.create({
     recordId: existing._id,
@@ -617,6 +630,10 @@ router.delete("/:id", requireRole("clerk", "accountant", "trifone", "press", "cf
   // Pending edits would otherwise survive as review rows the CFO can neither
   // approve nor reject, since both paths require the underlying record.
   await RecordChange.deleteMany({ recordId: existing._id, status: "pending" });
+
+  if (isPressCompany(existing.company)) {
+    await syncPressMaterialCost(existing.productName);
+  }
 
   res.json({ message: "Record deleted" });
 }));

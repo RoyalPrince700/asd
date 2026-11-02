@@ -94,6 +94,7 @@ const ELECTRONICS_CATALOG_FIELDS = [
 ];
 
 const PRESS_CATALOG_FIELDS = [
+  { key: "costPrice", label: "Cost Price", type: "money" },
   { key: "openingStock", label: "Opening Stock", type: "count" },
   { key: "closingStock", label: "Closing Stock", type: "count" },
 ];
@@ -244,11 +245,12 @@ function normalizePressData(data) {
   const raw = data?.toObject?.() || data || {};
   const openingStock = Number(raw.openingStock ?? 0) || 0;
   const closingStock = Number(raw.closingStock ?? openingStock) || 0;
-  return { openingStock, closingStock };
+  const costPrice = Math.max(0, Number(raw.costPrice) || 0);
+  return { openingStock, closingStock, costPrice };
 }
 
 function emptyPressData() {
-  return { openingStock: 0, closingStock: 0 };
+  return { openingStock: 0, closingStock: 0, costPrice: 0 };
 }
 
 module.exports = {

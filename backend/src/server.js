@@ -13,6 +13,7 @@ const reportRoutes = require("./routes/reports");
 const analysisRoutes = require("./routes/analysis");
 const requestRoutes = require("./routes/requests");
 const pressMaterialRoutes = require("./routes/pressMaterials");
+const pressBookRoutes = require("./routes/pressBooks");
 const pressDeletionRoutes = require("./routes/pressDeletions");
 const deletionLogRoutes = require("./routes/deletionLogs");
 const { bootstrapAdmin, bootstrapProducts } = require("./utils/seed");
@@ -51,6 +52,7 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/analysis", analysisRoutes);
 app.use("/api/requests", requestRoutes);
 app.use("/api/press-materials", pressMaterialRoutes);
+app.use("/api/press-books", pressBookRoutes);
 app.use("/api/press-deletions", pressDeletionRoutes);
 app.use("/api/deletion-logs", deletionLogRoutes);
 

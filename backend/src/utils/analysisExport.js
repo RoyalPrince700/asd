@@ -62,9 +62,9 @@ function priceNote(company) {
     return "Value left is quantity remaining × cost price.";
   }
   if (company === "press") {
-    return "Press materials have no price on file, so value left is blank.";
+    return "Value left is quantity remaining × the cost per unit entered by Press staff. Materials with no cost on file are blank.";
   }
-  return "Accessible Publishers uses sale price. Trifone Gadgets and Trifone Electronics use cost price. Press has no price on file.";
+  return "Accessible Publishers uses sale price. Trifone Gadgets and Trifone Electronics use cost price. Press uses the cost per unit entered by Press staff.";
 }
 
 function exportRows(data, query) {

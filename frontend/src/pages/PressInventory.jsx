@@ -11,6 +11,15 @@ function fmt(value) {
   });
 }
 
+function money(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "—";
+  return `₦${amount.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 function isLowStock(value) {
   return Number(value || 0) < LOW_STOCK_THRESHOLD;
 }
@@ -115,6 +124,7 @@ export function PressInventory() {
                   <tr>
                     <th>#</th>
                     <th>Materials Item</th>
+                    <th>Cost / unit</th>
                     <th>Opening</th>
                     <th>Balance</th>
                   </tr>
@@ -129,6 +139,7 @@ export function PressInventory() {
                       >
                         <td>{start + index}</td>
                         <td>{product.name}</td>
+                        <td>{money(product.costPrice)}</td>
                         <td>{fmt(product.openingBalance)}</td>
                         <td className="num-strong">
                           <span

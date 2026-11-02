@@ -12,6 +12,7 @@ const SNAPSHOT_KEYS = [
   "stockReceived",
   "stockOut",
   "closingBalance",
+  "cost",
 ];
 
 function snapshotRecord(record) {
@@ -24,6 +25,7 @@ function snapshotRecord(record) {
 
 function applySnapshot(record, snapshot) {
   for (const key of SNAPSHOT_KEYS) {
+    if (snapshot[key] === undefined) continue;
     record[key] = snapshot[key];
   }
 }

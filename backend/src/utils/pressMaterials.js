@@ -20,6 +20,12 @@ function httpError(message, status) {
   return err;
 }
 
+function moneyAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) return 0;
+  return Math.round(amount * 100) / 100;
+}
+
 async function findPressProductByName(name) {
   const trimmed = String(name || "").trim();
   if (!trimmed) return null;
@@ -43,6 +49,7 @@ async function queuePressMaterials(items, options) {
     const key = nameKey(name);
     const inbound = Math.max(0, Math.round(Number(item.inbound) || 0));
     const outbound = Math.max(0, Math.round(Number(item.outbound) || 0));
+    const cost = moneyAmount(item.cost);
 
     if (!key) {
       skipped.push({ name, message: "Raw material name is required." });
@@ -54,12 +61,13 @@ async function queuePressMaterials(items, options) {
       if (first) {
         first.inbound += inbound;
         first.outbound += outbound;
+        if (cost > 0) first.cost = cost;
       }
       continue;
     }
 
     seen.add(key);
-    accepted.push({ name, nameKey: key, inbound, outbound });
+    accepted.push({ name, nameKey: key, inbound, outbound, cost });
   }
 
   const readyToCheck = [];
@@ -132,6 +140,7 @@ async function queuePressMaterials(items, options) {
     inbound: row.inbound,
     outbound: row.outbound,
     remark,
+    cost: row.cost || 0,
     openingBalance: 0,
     closingBalance: row.closing,
     status: "pending",
@@ -169,7 +178,11 @@ async function approvePressMaterial(id, reviewerId) {
     product = await Product.create({
       name: claimed.name,
       company: COMPANIES.PRESS,
-      pressData: { openingStock: 0, closingStock: claimed.closingBalance },
+      pressData: {
+        openingStock: 0,
+        closingStock: claimed.closingBalance,
+        costPrice: claimed.cost || 0,
+      },
       uploadedBy: claimed.submittedBy,
     });
     await StockRecord.create({
@@ -182,6 +195,7 @@ async function approvePressMaterial(id, reviewerId) {
       inbound: claimed.inbound,
       outbound: claimed.outbound,
       remark: claimed.remark,
+      cost: claimed.cost || 0,
       stockReceived: 0,
       stockOut: 0,
       closingBalance: claimed.closingBalance,
@@ -215,9 +229,29 @@ async function rejectPressMaterial(id, reviewerId) {
   throw httpError("This raw material has already been reviewed.", 409);
 }
 
+async function syncPressMaterialCost(productName) {
+  const product = await findPressProductByName(productName);
+  if (!product) return;
+
+  const latest = await StockRecord.findOne({
+    company: COMPANIES.PRESS,
+    productName: product.name,
+    cost: { $gt: 0 },
+  })
+    .sort({ createdAt: -1 })
+    .select("cost")
+    .lean();
+
+  await Product.updateOne(
+    { _id: product._id },
+    { $set: { "pressData.costPrice": latest ? Number(latest.cost) || 0 : 0 } }
+  );
+}
+
 module.exports = {
   nameKey,
   queuePressMaterials,
   approvePressMaterial,
   rejectPressMaterial,
+  syncPressMaterialCost,
 };

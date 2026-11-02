@@ -24,9 +24,25 @@ const AdminHome = lazyNamed(() => import("./pages/AdminHome.jsx"), "AdminHome");
 const Settings = lazyNamed(() => import("./pages/Settings.jsx"), "Settings");
 const AccountantMovement = lazyNamed(() => import("./pages/AccountantMovement.jsx"), "AccountantMovement");
 const AccountantInventory = lazyNamed(() => import("./pages/AccountantInventory.jsx"), "AccountantInventory");
+const AccountantWorkInProgress = lazyNamed(
+  () => import("./pages/PressBooks.jsx"),
+  "AccountantWorkInProgress"
+);
+const AccountantFinishedBooks = lazyNamed(
+  () => import("./pages/PressBooks.jsx"),
+  "AccountantFinishedBooks"
+);
 const TrifoneMovement = lazyNamed(() => import("./pages/TrifoneMovement.jsx"), "TrifoneMovement");
 const TrifoneInventory = lazyNamed(() => import("./pages/TrifoneInventory.jsx"), "TrifoneInventory");
 const PressMovement = lazyNamed(() => import("./pages/PressMovement.jsx"), "PressMovement");
+const PressWorkInProgress = lazyNamed(
+  () => import("./pages/PressBooks.jsx"),
+  "PressWorkInProgress"
+);
+const PressFinishedBooks = lazyNamed(
+  () => import("./pages/PressBooks.jsx"),
+  "PressFinishedBooks"
+);
 const PressInventory = lazyNamed(() => import("./pages/PressInventory.jsx"), "PressInventory");
 const PressApprovals = lazyNamed(() => import("./pages/PressApprovals.jsx"), "PressApprovals");
 const PressManagerMovement = lazyNamed(
@@ -107,6 +123,22 @@ export default function App() {
             }
           />
           <Route
+            path="/accountant/wip"
+            element={
+              <ProtectedRoute role="accountant">
+                <AccountantWorkInProgress />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/accountant/finished"
+            element={
+              <ProtectedRoute role="accountant">
+                <AccountantFinishedBooks />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/trifone/movement"
             element={
               <ProtectedRoute role="trifone">
@@ -127,6 +159,22 @@ export default function App() {
             element={
               <ProtectedRoute role="press">
                 <PressMovement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/press/wip"
+            element={
+              <ProtectedRoute roles={["press", "press_manager"]}>
+                <PressWorkInProgress />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/press/finished"
+            element={
+              <ProtectedRoute roles={["press", "press_manager"]}>
+                <PressFinishedBooks />
               </ProtectedRoute>
             }
           />

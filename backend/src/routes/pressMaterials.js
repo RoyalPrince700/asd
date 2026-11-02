@@ -60,6 +60,7 @@ router.post(
           name: req.body.name,
           inbound: req.body.inbound,
           outbound: req.body.outbound,
+          cost: req.body.cost,
         },
       ],
       {

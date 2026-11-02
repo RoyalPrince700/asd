@@ -16,6 +16,15 @@ function fmt(value) {
   });
 }
 
+function money(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "—";
+  return `₦${amount.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 function fmtDate(value) {
   if (!value) return "—";
   return String(value).slice(0, 10);
@@ -156,6 +165,7 @@ export function PressApprovals() {
                   <th>Material</th>
                   <th>In</th>
                   <th>Out</th>
+                  <th>Cost / unit</th>
                   <th>Remark</th>
                   <th>Closing</th>
                   <th>Added by</th>
@@ -171,6 +181,7 @@ export function PressApprovals() {
                     <td>{row.name}</td>
                     <td>{fmt(row.inbound)}</td>
                     <td>{fmt(row.outbound)}</td>
+                    <td>{money(row.cost)}</td>
                     <td>
                       <RemarkTag value={row.remark} />
                     </td>

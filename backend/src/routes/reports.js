@@ -73,12 +73,30 @@ router.get(
     const title = `Transaction report · ${monthTitle(bounds.label)}`;
     const filename = `transactions-${bounds.label}`;
 
+    const includeCost = filter.company === COMPANIES.PRESS;
+
     if (type === "excel") {
-      await sendTransactionExcel(res, { records, summary, pendingMap, title, scope, filename });
+      await sendTransactionExcel(res, {
+        records,
+        summary,
+        pendingMap,
+        title,
+        scope,
+        filename,
+        includeCost,
+      });
       return;
     }
 
-    await sendTransactionDocx(res, { records, summary, pendingMap, title, scope, filename });
+    await sendTransactionDocx(res, {
+      records,
+      summary,
+      pendingMap,
+      title,
+      scope,
+      filename,
+      includeCost,
+    });
   })
 );
 
@@ -125,6 +143,13 @@ function buildFilter(query) {
 
 function formatDate(value) {
   return new Date(value).toISOString().slice(0, 10);
+}
+
+function formatMoney(value) {
+  return Number(value || 0).toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function formatNumber(value) {
@@ -233,7 +258,7 @@ function styleHeaderRow(row) {
   };
 }
 
-async function sendTransactionExcel(res, { records, summary, pendingMap, title, scope, filename }) {
+async function sendTransactionExcel(res, { records, summary, pendingMap, title, scope, filename, includeCost }) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Accessible Stock Dashboard";
   workbook.title = title;
@@ -250,6 +275,7 @@ async function sendTransactionExcel(res, { records, summary, pendingMap, title, 
     { header: "Opening", key: "openingBalance", width: 14 },
     { header: "In", key: "inbound", width: 12 },
     { header: "Out", key: "outbound", width: 12 },
+    ...(includeCost ? [{ header: "Cost per unit", key: "cost", width: 16 }] : []),
     { header: "Remark", key: "remark", width: 16 },
     { header: "Closing", key: "closingBalance", width: 14 },
     { header: "Posted by", key: "enteredBy", width: 24 },
@@ -267,6 +293,7 @@ async function sendTransactionExcel(res, { records, summary, pendingMap, title, 
       openingBalance: row.openingBalance,
       inbound: row.inbound,
       outbound: row.outbound,
+      ...(includeCost ? { cost: row.cost > 0 ? row.cost : null } : {}),
       remark: cfoTransactionRemarkExport(row.remark),
       closingBalance: row.closingBalance,
       enteredBy: enteredByLabel(row.enteredBy),
@@ -283,6 +310,7 @@ async function sendTransactionExcel(res, { records, summary, pendingMap, title, 
     enteredBy: `${summary.totals.recordCount} records`,
   });
   totalsRow.font = { bold: true };
+  if (includeCost) sheet.getColumn("cost").numFmt = "#,##0.00";
   sheet.views = [{ state: "frozen", ySplit: 1 }];
 
   res.setHeader(
@@ -294,7 +322,7 @@ async function sendTransactionExcel(res, { records, summary, pendingMap, title, 
   res.end();
 }
 
-async function sendTransactionDocx(res, { records, summary, pendingMap, title, scope, filename }) {
+async function sendTransactionDocx(res, { records, summary, pendingMap, title, scope, filename, includeCost }) {
   const t = summary.totals;
   const header = new TableRow({
     children: [
@@ -305,6 +333,7 @@ async function sendTransactionDocx(res, { records, summary, pendingMap, title, s
       "Opening",
       "In",
       "Out",
+      ...(includeCost ? ["Cost per unit"] : []),
       "Remark",
       "Closing",
       "Posted by",
@@ -329,6 +358,9 @@ async function sendTransactionDocx(res, { records, summary, pendingMap, title, s
           cell(formatNumber(row.openingBalance), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.inbound), { align: AlignmentType.RIGHT }),
           cell(formatNumber(row.outbound), { align: AlignmentType.RIGHT }),
+          ...(includeCost
+            ? [cell(row.cost > 0 ? formatMoney(row.cost) : "—", { align: AlignmentType.RIGHT })]
+            : []),
           cell(cfoTransactionRemarkExport(row.remark)),
           cell(formatNumber(row.closingBalance), { align: AlignmentType.RIGHT }),
           cell(enteredByLabel(row.enteredBy) || "—"),

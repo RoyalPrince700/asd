@@ -33,6 +33,7 @@ const stockRecordSchema = new mongoose.Schema(
       enum: TRANSACTION_REMARKS,
       default: DEFAULT_TRANSACTION_REMARK,
     },
+    cost: { type: Number, min: 0, default: 0 },
     stockReceived: { type: Number, required: true, min: 0, default: 0 },
     stockOut: { type: Number, required: true, min: 0, default: 0 },
     closingBalance: { type: Number, required: true, min: 0 },

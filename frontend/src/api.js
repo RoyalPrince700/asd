@@ -247,6 +247,34 @@ export const api = {
     request(`/api/press-materials/${id}/approve`, { method: "POST" }),
   rejectPressMaterial: (id) =>
     request(`/api/press-materials/${id}/reject`, { method: "POST" }),
+  pressBooks: (params = {}) => request(`/api/press-books${query(params)}`),
+  createPressBook: (payload) =>
+    request("/api/press-books", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updatePressBook: (id, payload) =>
+    request(`/api/press-books/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deletePressBook: (id) => request(`/api/press-books/${id}`, { method: "DELETE" }),
+  downloadPressBooks: async (type, category) => {
+    const blob = await request(
+      `/api/press-books/export/${type}${query({ category })}`,
+      { blob: true }
+    );
+    const ext = type === "excel" ? "xlsx" : "docx";
+    const name = category === "wip" ? "work-in-progress" : "finished-books";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${name}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   pressDeletions: (params = {}) =>
     request(`/api/press-deletions${query(params)}`),
   deletionLogs: (params = {}) =>

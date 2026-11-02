@@ -17,6 +17,15 @@ function fmt(value) {
   });
 }
 
+function money(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "—";
+  return `₦${amount.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 function fmtDate(value) {
   if (!value) return "—";
   return new Date(value).toISOString().slice(0, 10);
@@ -179,6 +188,7 @@ export function CfoEditedLedger() {
                   <th>Date</th>
                   <th>In</th>
                   <th>Out</th>
+                  <th>Cost / unit</th>
                   <th>Remark</th>
                   <th>Closing</th>
                   {tab === "pending" ? <th /> : null}
@@ -220,6 +230,11 @@ export function CfoEditedLedger() {
                         before={before.outbound}
                         after={after.outbound}
                         format={fmt}
+                      />
+                      <ChangeCell
+                        before={before.cost || 0}
+                        after={after.cost || 0}
+                        format={money}
                       />
                       <ChangeCell
                         before={before.remark}

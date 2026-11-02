@@ -4,6 +4,8 @@ const StockRecord = require("../models/StockRecord");
 const { protect, requireRole } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/asyncHandler");
 const { applySnapshot } = require("../utils/recordChanges");
+const { syncPressMaterialCost } = require("../utils/pressMaterials");
+const { COMPANIES } = require("../constants/companies");
 
 const router = express.Router();
 
@@ -74,8 +76,16 @@ router.post("/:id/reject", requireRole("cfo"), asyncHandler(async (req, res) => 
     return res.status(404).json({ message: "The underlying transaction no longer exists." });
   }
 
+  const proposedName = record.productName;
   applySnapshot(record, change.originalSnapshot);
   await record.save();
+
+  if (record.company === COMPANIES.PRESS) {
+    await syncPressMaterialCost(record.productName);
+    if (proposedName && proposedName !== record.productName) {
+      await syncPressMaterialCost(proposedName);
+    }
+  }
 
   change.status = "rejected";
   change.reviewedBy = req.user._id;

@@ -84,6 +84,7 @@ export function groupTransactions(records, keyOf = productKey) {
       outbound: chronological.reduce((sum, row) => sum + n(row.outbound), 0),
       opening: oldest.openingBalance,
       closing: newest.closingBalance,
+      cost: [...chronological].reverse().find((row) => n(row.cost) > 0)?.cost || 0,
       date: newest.date,
       company: newest.company,
       location: newest.location,

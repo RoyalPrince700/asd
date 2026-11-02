@@ -29,6 +29,7 @@ const snapshotFields = {
   stockReceived: { type: Number, required: true, min: 0, default: 0 },
   stockOut: { type: Number, required: true, min: 0, default: 0 },
   closingBalance: { type: Number, required: true, min: 0 },
+  cost: { type: Number, min: 0, default: 0 },
 };
 
 const recordChangeSchema = new mongoose.Schema(

@@ -32,6 +32,7 @@ const pressDataSchema = new mongoose.Schema(
   {
     openingStock: { type: Number, default: 0, min: 0 },
     closingStock: { type: Number, default: 0, min: 0 },
+    costPrice: { type: Number, default: 0, min: 0 },
   },
   { _id: false, strict: false }
 );

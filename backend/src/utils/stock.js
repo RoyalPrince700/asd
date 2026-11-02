@@ -5,6 +5,12 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function moneyAmount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n * 100) / 100;
+}
+
 function computeClosingBalance(fields) {
   const opening = toNumber(fields.openingBalance);
   const inbound = toNumber(fields.inbound);
@@ -43,6 +49,7 @@ function normalizeRecordInput(body) {
     stockReceived,
     stockOut,
     closingBalance,
+    cost: moneyAmount(body.cost),
   };
 }
 

@@ -21,6 +21,15 @@ function fmt(value) {
   });
 }
 
+function money(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "—";
+  return `₦${amount.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 function groupPostedBy(rows) {
   const labels = new Set(rows.map((row) => enteredByLabel(row.enteredBy)));
   if (labels.size === 1) return [...labels][0];
@@ -169,6 +178,7 @@ export function PressManagerMovement() {
                 <th>Opening</th>
                 <th>In</th>
                 <th>Out</th>
+                <th>Cost / unit</th>
                 <th>Remark</th>
                 <th>Closing</th>
                 <th>Posted by</th>
@@ -177,13 +187,13 @@ export function PressManagerMovement() {
             <tbody>
               {listLoading && records.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="hint">
+                  <td colSpan={10} className="hint">
                     Loading transactions…
                   </td>
                 </tr>
               ) : pageGroups.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="hint">
+                  <td colSpan={10} className="hint">
                     {appliedStockId
                       ? "No material matches that search."
                       : `No Press transactions in ${formatMonth(month) || "this month"}.`}
@@ -221,6 +231,7 @@ export function PressManagerMovement() {
                         <td>{fmt(group.opening)}</td>
                         <td>{fmt(group.inbound)}</td>
                         <td>{fmt(group.outbound)}</td>
+                        <td>{money(group.cost)}</td>
                         <td>
                           {group.remark ? <RemarkTag value={group.remark} /> : "—"}
                         </td>
@@ -236,6 +247,7 @@ export function PressManagerMovement() {
                               <td>{fmt(row.openingBalance)}</td>
                               <td>{fmt(row.inbound)}</td>
                               <td>{fmt(row.outbound)}</td>
+                              <td>{money(row.cost)}</td>
                               <td>
                                 <RemarkTag value={row.remark} />
                               </td>

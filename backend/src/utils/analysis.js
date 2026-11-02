@@ -585,9 +585,9 @@ function analyzeElectronicsProducts(products, movementMap, records = []) {
     const movement = movementByProduct.get(product.name) || { inbound: 0, outbound: 0 };
     const isPress = product.company === COMPANIES.PRESS;
     const details = isPress
-      ? {}
+      ? product.pressData?.toObject?.() || product.pressData || {}
       : product.electronicsData?.toObject?.() || product.electronicsData || {};
-    const unitPrice = isPress ? 0 : Number(details.costPrice) || 0;
+    const unitPrice = Number(details.costPrice) || 0;
     totalCurrentStock += currentStock;
     const status = stockStatus(currentStock);
     if (status === "outOfStock") outOfStock += 1;
@@ -603,7 +603,7 @@ function analyzeElectronicsProducts(products, movementMap, records = []) {
       status,
       unitPrice,
       stockValue: currentStock * unitPrice,
-      priceBasis: isPress ? "" : "Cost price",
+      priceBasis: isPress ? (unitPrice > 0 ? "Cost price" : "") : "Cost price",
     });
   }
 
@@ -732,8 +732,15 @@ function buildMarkdown({ accessible, trifone, electronics, press, movement, gene
     const prs = press.summary;
     lines.push(`### ${companyLabel(COMPANIES.PRESS)}`);
     lines.push("");
+    const pressStockValue = (press.catalogRows || []).reduce(
+      (sum, row) => sum + (Number(row.stockValue) || 0),
+      0
+    );
     lines.push(`- **Catalogue size:** ${fmtNum(prs.totalProducts)} raw material items`);
     lines.push(`- **Current stock (live movement):** ${fmtNum(prs.totalCurrentStock)}`);
+    lines.push(
+      `- **Stock value on hand:** ${fmtMoney(pressStockValue)} (quantity × cost per unit entered by Press staff)`
+    );
     lines.push(`- **Out of stock items:** ${fmtNum(prs.outOfStock)}`);
     lines.push(`- **Critical stock (1–5 units):** ${fmtNum(prs.criticalStockCount)} items`);
     lines.push(`- **Low stock (6–20 units):** ${fmtNum(prs.lowStockCount)} items`);

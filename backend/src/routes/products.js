@@ -276,6 +276,9 @@ router.get("/my-inventory", requireRole("clerk", "accountant", "trifone", "press
         company: row.company,
         openingBalance: catalogOpeningFromRow(row),
         balance: liveLocationlessBalance(row, movementMap),
+        ...(company === COMPANIES.PRESS
+          ? { costPrice: normalizePressData(row.pressData).costPrice }
+          : {}),
       };
     }
 
@@ -359,9 +362,16 @@ router.get("/", asyncHandler(async (req, res) => {
 
   const products = await Product.find(filter)
     .sort({ name: 1 })
-    .select("name company");
+    .select("name company pressData")
+    .lean();
   res.json({
-    products: products.map((p) => ({ name: p.name, company: p.company })),
+    products: products.map((p) => ({
+      name: p.name,
+      company: p.company,
+      ...(p.company === COMPANIES.PRESS
+        ? { costPrice: Number(p.pressData?.costPrice) || 0 }
+        : {}),
+    })),
   });
 }));
 
@@ -526,20 +536,29 @@ async function importCatalogRows(company, rows, userId, mode) {
     };
   }
 
-  const bulkOps = rows.map((row) => ({
-    updateOne: {
-      filter: { company, name: row.name },
-      update: {
-        $set: {
-          company,
-          name: row.name,
-          uploadedBy: userId,
-          ...catalogSetFields(company, row),
+  const bulkOps = rows.map((row) => {
+    const fields =
+      company === COMPANIES.PRESS
+        ? {
+            "pressData.openingStock": Number(row.pressData?.openingStock) || 0,
+            "pressData.closingStock": Number(row.pressData?.closingStock) || 0,
+          }
+        : catalogSetFields(company, row);
+    return {
+      updateOne: {
+        filter: { company, name: row.name },
+        update: {
+          $set: {
+            company,
+            name: row.name,
+            uploadedBy: userId,
+            ...fields,
+          },
         },
+        upsert: true,
       },
-      upsert: true,
-    },
-  }));
+    };
+  });
 
   const bulkResult = await Product.bulkWrite(bulkOps, { ordered: false });
   const added = bulkResult.upsertedCount || 0;

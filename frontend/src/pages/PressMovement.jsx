@@ -27,6 +27,7 @@ const emptyForm = {
   date: new Date().toISOString().slice(0, 10),
   inbound: "",
   outbound: "",
+  cost: "",
   remark: DEFAULT_TRANSACTION_REMARK,
 };
 
@@ -35,6 +36,7 @@ const emptyMaterial = {
   date: new Date().toISOString().slice(0, 10),
   inbound: "",
   outbound: "",
+  cost: "",
   remark: DEFAULT_TRANSACTION_REMARK,
 };
 
@@ -47,6 +49,15 @@ function fmt(value) {
   return Number(value || 0).toLocaleString("en-US", {
     maximumFractionDigits: 0,
   });
+}
+
+function money(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "—";
+  return `₦${amount.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export function PressMovement() {
@@ -87,6 +98,13 @@ export function PressMovement() {
       return [form.productName, ...names];
     }
     return names;
+  }, [products, form.productName]);
+
+  const costOnFile = useMemo(() => {
+    const name = form.productName.trim().toLowerCase();
+    if (!name) return 0;
+    const match = products.find((product) => product.name.toLowerCase() === name);
+    return Number(match?.costPrice) || 0;
   }, [products, form.productName]);
 
   async function loadRecords() {
@@ -155,6 +173,7 @@ export function PressMovement() {
         date: materialForm.date,
         inbound: n(materialForm.inbound),
         outbound: n(materialForm.outbound),
+        cost: materialForm.cost === "" ? 0 : n(materialForm.cost),
         remark: materialForm.remark,
       });
       const successMessage =
@@ -189,6 +208,7 @@ export function PressMovement() {
         date: form.date,
         inbound: n(form.inbound),
         outbound: n(form.outbound),
+        cost: form.cost === "" ? 0 : n(form.cost),
         remark: form.remark,
         stockReceived: 0,
         stockOut: 0,
@@ -220,6 +240,7 @@ export function PressMovement() {
         return next;
       });
       await loadRecords();
+      await loadProducts();
       toast({ message: successMessage, type: "success" });
     } catch (err) {
       setError(err.message);
@@ -243,6 +264,7 @@ export function PressMovement() {
       date: row.date.slice(0, 10),
       inbound: String(row.inbound),
       outbound: String(row.outbound),
+      cost: row.cost ? String(row.cost) : "",
       remark: row.remark || DEFAULT_TRANSACTION_REMARK,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -308,9 +330,10 @@ export function PressMovement() {
           <p className="lede tight">
             Post In or Out for materials already in the catalog. Each material
             appears once. Another movement for a material you already recorded is
-            added under that same row — open it to see every posting. Use + to
-            add a new raw material; a press manager approves it before it appears
-            in inventory.
+            added under that same row — open it to see every posting. Enter a
+            cost per unit on any new posting to set or update that material.
+            Use + to add a new raw material; a press manager approves it before
+            it appears in inventory.
           </p>
         </div>
         <button type="button" onClick={() => setShowNewMaterial((open) => !open)}>
@@ -324,8 +347,10 @@ export function PressMovement() {
             <h2>Add a raw material</h2>
           </div>
           <p className="hint">
-            Type the material name, then In and Out. A stock ID is assigned when
-            you submit. It stays out of the catalog until a press manager approves it.
+            Type the material name, then In and Out. Cost per unit is optional
+            and can be added on this entry or on any later posting. A stock ID
+            is assigned when you submit. It stays out of the catalog until a
+            press manager approves it.
           </p>
           <div className="grid-3">
             <label>
@@ -379,6 +404,19 @@ export function PressMovement() {
               />
             </label>
             <label>
+              Cost per unit (₦)
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={materialForm.cost}
+                onChange={(e) => setMaterialField("cost", e.target.value)}
+                placeholder="Optional"
+              />
+            </label>
+          </div>
+          <div className="grid-3">
+            <label>
               Remark
               <select
                 value={materialForm.remark}
@@ -421,7 +459,26 @@ export function PressMovement() {
               required
             />
           </label>
+          <label>
+            Cost per unit (₦)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.cost}
+              onChange={(e) => setField("cost", e.target.value)}
+              placeholder="Optional"
+            />
+          </label>
+          <label>
+            Cost on file
+            <input type="text" value={form.productName ? money(costOnFile) : "—"} readOnly />
+          </label>
         </div>
+        <p className="hint">
+          Enter a cost on this posting to set or update it for the material. Leave
+          it blank to keep the cost already on file.
+        </p>
 
         <div className="grid-3">
           <label>
@@ -525,6 +582,7 @@ export function PressMovement() {
                   <th>Material</th>
                   <th>In</th>
                   <th>Out</th>
+                  <th>Cost / unit</th>
                   <th>Closing</th>
                   <th>Status</th>
                 </tr>
@@ -537,6 +595,7 @@ export function PressMovement() {
                     <td>{row.name}</td>
                     <td>{fmt(row.inbound)}</td>
                     <td>{fmt(row.outbound)}</td>
+                    <td>{money(row.cost)}</td>
                     <td className="num-strong">{fmt(row.closingBalance)}</td>
                     <td>
                       <span className="status-pill status-pill--pending">
@@ -610,6 +669,7 @@ export function PressMovement() {
                 <th>Opening</th>
                 <th>In</th>
                 <th>Out</th>
+                <th>Cost / unit</th>
                 <th>Remark</th>
                 <th>Closing</th>
                 <th>Status</th>
@@ -619,13 +679,13 @@ export function PressMovement() {
             <tbody>
               {listLoading && records.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="hint">
+                  <td colSpan={11} className="hint">
                     Loading transactions…
                   </td>
                 </tr>
               ) : pageGroups.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="hint">
+                  <td colSpan={11} className="hint">
                     {appliedStockId
                       ? "No material matches that search."
                       : `No transactions in ${formatMonth(month) || "this month"}.`}
@@ -663,6 +723,7 @@ export function PressMovement() {
                         <td>{fmt(group.opening)}</td>
                         <td>{fmt(group.inbound)}</td>
                         <td>{fmt(group.outbound)}</td>
+                        <td>{money(group.cost)}</td>
                         <td>
                           {group.remark ? <RemarkTag value={group.remark} /> : "—"}
                         </td>
@@ -690,6 +751,7 @@ export function PressMovement() {
                               <td>{fmt(row.openingBalance)}</td>
                               <td>{fmt(row.inbound)}</td>
                               <td>{fmt(row.outbound)}</td>
+                              <td>{money(row.cost)}</td>
                               <td>
                                 <RemarkTag value={row.remark} />
                               </td>

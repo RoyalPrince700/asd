@@ -2,10 +2,12 @@ import { useMemo, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
   BarChart3,
+  BookOpen,
   ClipboardCheck,
   ClipboardList,
   Clock,
   Inbox,
+  Layers,
   LayoutDashboard,
   LogOut,
   Package,
@@ -50,6 +52,8 @@ const NAV_BY_ROLE = {
   accountant: [
     { to: "/accountant/movement", label: "Stock movement", icon: ClipboardList },
     { to: "/accountant/inventory", label: "Inventory", icon: Package },
+    { to: "/accountant/wip", label: "Work in progress", icon: Layers },
+    { to: "/accountant/finished", label: "Finished books", icon: BookOpen },
     MY_REQUESTS_NAV,
   ],
   trifone: [
@@ -59,12 +63,16 @@ const NAV_BY_ROLE = {
   ],
   press: [
     { to: "/press/movement", label: "Raw materials", icon: ClipboardList },
+    { to: "/press/wip", label: "Work in progress", icon: Layers },
+    { to: "/press/finished", label: "Finished books", icon: BookOpen },
     { to: "/press/inventory", label: "Inventory", icon: Package },
     MY_REQUESTS_NAV,
   ],
   press_manager: [
     { to: "/press-manager/approvals", label: "Approvals", icon: ClipboardCheck },
     { to: "/press-manager/movement", label: "All movements", icon: ScrollText },
+    { to: "/press/wip", label: "Work in progress", icon: Layers },
+    { to: "/press/finished", label: "Finished books", icon: BookOpen },
     { to: "/press-manager/log", label: "Deletion log", icon: History },
     { to: "/press/inventory", label: "Inventory", icon: Package },
     MY_REQUESTS_NAV,
